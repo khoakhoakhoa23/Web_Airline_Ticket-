@@ -1,0 +1,70 @@
+package com.flightbooking.controller;
+
+import com.flightbooking.dto.NotificationDTO;
+import com.flightbooking.service.NotificationService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+/**
+ * ⚠️ TEMPORARILY DISABLED ⚠️
+ * 
+ * This controller is disabled because it calls methods that don't exist in NotificationService.
+ * 
+ * Missing methods:
+ * - sendNotification(String bookingId, String channel, String recipient, String content)
+ * - sendBookingConfirmation(String bookingId)
+ * - getNotificationsByBookingId(String bookingId)
+ * 
+ * NotificationService currently only has:
+ * - sendBookingConfirmationEmail(String bookingId)
+ * - sendPaymentReceiptEmail(String paymentId, Payment payment)
+ * - sendBookingReminderEmail(String bookingId)
+ * 
+ * TODO: Either implement missing methods or refactor this controller to match NotificationService.
+ */
+// @RestController
+// @RequestMapping("/api/notifications")
+// @CrossOrigin(origins = {"http://localhost:3000", "http://localhost:5173", "http://localhost:5174"})
+public class NotificationController {
+    
+    // @Autowired
+    private NotificationService notificationService;
+    
+    // @PostMapping
+    public ResponseEntity<NotificationDTO> sendNotification(
+            @RequestParam String bookingId,
+            @RequestParam String channel,
+            @RequestParam String recipient,
+            @RequestParam String content) {
+        try {
+            NotificationDTO notification = notificationService.sendNotification(
+                bookingId, channel, recipient, content);
+            return ResponseEntity.status(HttpStatus.CREATED).body(notification);
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
+        }
+    }
+    
+    // @PostMapping("/booking/{bookingId}/confirm")
+    public ResponseEntity<NotificationDTO> sendBookingConfirmation(@PathVariable String bookingId) {
+        try {
+            NotificationDTO notification = notificationService.sendBookingConfirmation(bookingId);
+            return ResponseEntity.ok(notification);
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
+        }
+    }
+    
+    // @GetMapping("/booking/{bookingId}")
+    public ResponseEntity<List<NotificationDTO>> getNotificationsByBookingId(
+            @PathVariable String bookingId) {
+        List<NotificationDTO> notifications = 
+            notificationService.getNotificationsByBookingId(bookingId);
+        return ResponseEntity.ok(notifications);
+    }
+}
+

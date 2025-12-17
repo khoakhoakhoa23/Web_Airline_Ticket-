@@ -1,0 +1,265 @@
+.extra-services-page {
+  min-height: calc(100vh - 200px);
+  padding: 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.extra-services-container {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 2rem;
+}
+
+.section-header {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.section-icon {
+  font-size: 3rem;
+}
+
+.support-packages {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.support-package {
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 1.5rem;
+  cursor: pointer;
+  transition: all 0.3s;
+  position: relative;
+}
+
+.support-package:hover {
+  border-color: #1a237e;
+  box-shadow: 0 4px 12px rgba(26, 35, 126, 0.1);
+}
+
+.support-package.selected {
+  border-color: #1a237e;
+  background-color: #f3f4ff;
+}
+
+.package-badge {
+  position: absolute;
+  top: -10px;
+  right: 10px;
+  background-color: #4caf50;
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.support-package h4 {
+  color: #1a237e;
+  margin-bottom: 0.5rem;
+  font-size: 1.3rem;
+}
+
+.package-price {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #1a237e;
+  margin: 0.5rem 0;
+}
+
+.package-description {
+  color: #666;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.package-features {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+}
+
+.package-features li {
+  color: #4caf50;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.package-button {
+  width: 100%;
+  padding: 0.75rem;
+  border: 2px solid #1a237e;
+  background-color: white;
+  color: #1a237e;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  margin-top: 1rem;
+}
+
+.support-package.selected .package-button {
+  background-color: #1a237e;
+  color: white;
+}
+
+.package-button:hover {
+  background-color: #1a237e;
+  color: white;
+}
+
+.insurance-options {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.insurance-option {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 2rem;
+}
+
+.insurance-content {
+  flex: 1;
+}
+
+.insurance-content h4 {
+  color: #1a237e;
+  margin-bottom: 0.5rem;
+}
+
+.insurance-content p {
+  color: #666;
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+}
+
+.insurance-price {
+  color: #1a237e;
+  font-weight: 600;
+  font-size: 1.1rem;
+  margin-top: 0.5rem;
+}
+
+.radio-group {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.radio-group label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.confirmation-text {
+  color: #666;
+  font-size: 0.9rem;
+  text-align: center;
+  padding: 1rem;
+  background: #f5f5f5;
+  border-radius: 8px;
+  margin: 2rem 0;
+}
+
+.continue-button {
+  background-color: #1a237e;
+  color: white;
+  padding: 1rem 2rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.3s;
+  align-self: center;
+  width: 100%;
+  max-width: 400px;
+}
+
+.continue-button:hover {
+  background-color: #283593;
+}
+
+.order-summary {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  height: fit-content;
+  position: sticky;
+  top: 2rem;
+}
+
+.order-summary h3 {
+  color: #1a237e;
+  margin-bottom: 1.5rem;
+  font-size: 1.3rem;
+}
+
+.order-section {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.order-item {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.order-icon {
+  font-size: 1.5rem;
+}
+
+.order-section p {
+  margin: 0.5rem 0;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.order-total {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 2px solid #1a237e;
+}
+
+.order-total p {
+  font-size: 1.2rem;
+  color: #1a237e;
+}
+
+@media (max-width: 1024px) {
+  .extra-services-container {
+    grid-template-columns: 1fr;
+  }
+  
+  .order-summary {
+    position: static;
+  }
+}
+
+@media (max-width: 768px) {
+  .support-packages {
+    grid-template-columns: 1fr;
+  }
+  
+  .insurance-option {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+

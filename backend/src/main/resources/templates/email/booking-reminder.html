@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flight Reminder</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            background-color: #ff9800;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            border-radius: 5px 5px 0 0;
+        }
+        .content {
+            background-color: #f9f9f9;
+            padding: 30px;
+            border: 1px solid #ddd;
+        }
+        .reminder-box {
+            background-color: #fff3e0;
+            border: 2px solid #ff9800;
+            border-radius: 5px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .time-info {
+            font-size: 24px;
+            font-weight: bold;
+            color: #ff9800;
+            margin: 15px 0;
+        }
+        .info-section {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: white;
+            border-left: 4px solid #ff9800;
+        }
+        .checklist {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .checklist-item {
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .checklist-item:last-child {
+            border-bottom: none;
+        }
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+            font-size: 12px;
+        }
+        .alert-icon {
+            font-size: 60px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>⏰ Flight Reminder</h1>
+    </div>
+    
+    <div class="content">
+        <p>Dear <span th:text="${userName}">Customer</span>,</p>
+        
+        <div class="reminder-box">
+            <div class="alert-icon">✈️</div>
+            <h2 style="margin: 10px 0; color: #ff9800;">Your flight is tomorrow!</h2>
+            <p style="font-size: 18px; margin: 15px 0;">
+                <strong>Booking Code:</strong> <span th:text="${bookingCode}">ABC123</span>
+            </p>
+        </div>
+        
+        <div class="info-section" th:if="${departureDate != null}">
+            <div style="font-weight: bold; color: #666;">Departure:</div>
+            <div class="time-info">
+                <span th:text="${departureDate}">Monday, January 20, 2025</span>
+                <br/>
+                <span th:text="${departureTime}">09:00</span>
+            </div>
+        </div>
+        
+        <div class="info-section" th:if="${flightSegments != null and !flightSegments.isEmpty()}">
+            <div style="font-weight: bold; color: #666; margin-bottom: 10px;">Flight Details:</div>
+            <div th:each="segment : ${flightSegments}">
+                <div style="padding: 10px; background-color: #f5f5f5; margin-bottom: 10px; border-radius: 5px;">
+                    <strong th:text="${segment.flightNumber}">VN123</strong> - 
+                    <span th:text="${segment.airline}">Vietnam Airlines</span>
+                    <br/>
+                    <span th:text="${segment.origin}">SGN</span> 
+                    → 
+                    <span th:text="${segment.destination}">HAN</span>
+                    <br/>
+                    Departure: <span th:text="${segment.departTime}">09:00</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="checklist">
+            <h3 style="margin-top: 0; color: #ff9800;">Checklist:</h3>
+            <div class="checklist-item">✓ Check-in online or at the airport</div>
+            <div class="checklist-item">✓ Arrive at least 2 hours before departure</div>
+            <div class="checklist-item">✓ Bring valid ID and booking code</div>
+            <div class="checklist-item">✓ Check baggage allowance</div>
+            <div class="checklist-item">✓ Review prohibited items list</div>
+        </div>
+        
+        <p style="margin-top: 30px; padding: 15px; background-color: #e3f2fd; border-left: 4px solid #2196f3; border-radius: 3px;">
+            <strong>💡 Tip:</strong> Save time by checking in online 24 hours before your flight!
+        </p>
+        
+        <p style="margin-top: 20px;">
+            Have a safe flight!
+        </p>
+    </div>
+    
+    <div class="footer">
+        <p>This is an automated email. Please do not reply.</p>
+        <p>&copy; 2025 Flight Booking System. All rights reserved.</p>
+    </div>
+</body>
+</html>
+
