@@ -1,5 +1,6 @@
 package com.flightbooking.controller;
 
+import com.flightbooking.dto.BookedSeatDTO;
 import com.flightbooking.dto.CreateSeatSelectionRequest;
 import com.flightbooking.dto.SeatSelectionDTO;
 import com.flightbooking.service.SeatSelectionService;
@@ -44,6 +45,18 @@ public class SeatSelectionController {
         List<SeatSelectionDTO> seatSelections = 
             seatSelectionService.getSeatSelectionsBySegmentId(segmentId);
         return ResponseEntity.ok(seatSelections);
+    }
+    
+    /**
+     * Get booked seats for a flight with customer information
+     * GET /api/seat-selections/flight/{flightNumber}
+     */
+    @GetMapping("/flight/{flightNumber}")
+    public ResponseEntity<List<BookedSeatDTO>> getBookedSeatsByFlightNumber(
+            @PathVariable String flightNumber) {
+        List<BookedSeatDTO> bookedSeats = 
+            seatSelectionService.getBookedSeatsByFlightNumber(flightNumber);
+        return ResponseEntity.ok(bookedSeats);
     }
 }
 

@@ -292,6 +292,10 @@ export const seatSelectionService = {
   getSeatSelectionsBySegmentId: (segmentId) => {
     return api.get(`/seat-selections/segment/${segmentId}`);
   },
+  
+  getBookedSeatsByFlightNumber: (flightNumber) => {
+    return api.get(`/seat-selections/flight/${flightNumber}`);
+  },
 };
 
 export const baggageService = {

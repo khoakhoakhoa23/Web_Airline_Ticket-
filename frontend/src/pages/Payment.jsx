@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useBooking } from '../contexts/BookingContext';
 import { bookingService, paymentService } from '../services/api';
+import { toast } from 'react-toastify';
 import '../styles/pages/Payment.css';
 
 /**
@@ -13,11 +15,13 @@ import '../styles/pages/Payment.css';
  * 1. Get booking ID from URL params or localStorage
  * 2. Fetch booking details
  * 3. Display payment summary
- * 4. Create payment via API
- * 5. Redirect to payment provider (Stripe Checkout)
+ * 4. User accepts terms and clicks Pay
+ * 5. Create payment via API
+ * 6. Redirect to payment provider (Stripe Checkout)
  */
 const Payment = () => {
   const { user } = useAuth();
+  const { currentBooking, getBookingById } = useBooking();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   
@@ -27,26 +31,42 @@ const Payment = () => {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   /**
    * Fetch booking details on page load
    */
   useEffect(() => {
-    const fetchBooking = async () => {
+    const loadBooking = async () => {
       try {
-        // Get booking ID from URL params or localStorage
+        // Get booking ID from URL params or localStorage or context
         let bookingId = searchParams.get('booking_id');
         
         if (!bookingId) {
-          // Try to get from localStorage (temporary solution)
+          // Try to get from localStorage
           const storedBookingId = localStorage.getItem('currentBookingId');
           if (storedBookingId) {
             bookingId = storedBookingId;
+          } else if (currentBooking?.id) {
+            // Try to get from context
+            bookingId = currentBooking.id;
           } else {
             setError('No booking ID found. Please create a booking first.');
             setLoading(false);
             return;
           }
+        }
+        
+        // Update URL if bookingId was from localStorage/context
+        if (bookingId && !searchParams.get('booking_id')) {
+          navigate(`/booking/payment?booking_id=${bookingId}`, { replace: true });
+        }
+        
+        // Check if user is logged in
+        if (!user) {
+          toast.error('Please login to continue with payment');
+          navigate('/login');
+          return;
         }
         
         // Fetch booking details
@@ -75,114 +95,155 @@ const Payment = () => {
       }
     };
     
-    fetchBooking();
-  }, [searchParams, navigate]);
+    loadBooking();
+  }, [searchParams, navigate, user, currentBooking]);
 
-  const handleBillingChange = (e) => {
-    const { name, value } = e.target;
-    setBillingAddress({
-      ...billingAddress,
-      [name]: value,
-    });
-  };
-
-  const calculateTotal = () => {
-    if (!selectedFlight) return 0;
-    const basePrice = ((selectedFlight.baseFare || 0) + (selectedFlight.taxes || 0));
-    const supportPrice = extraServices?.supportPackage === 'STANDARD' ? 56.93 : extraServices?.supportPackage === 'PLATINUM' ? 58.49 : 0;
-    const medicalPrice = extraServices?.medicalCover ? 70.86 : 0;
-    const collapsePrice = extraServices?.collapseCover ? 18.86 : 0;
-    const baggagePrice = travellerInfo?.lostBaggageService ? 10.86 : 0;
-    return basePrice + supportPrice + medicalPrice + collapsePrice + baggagePrice;
-  };
-
+  /**
+   * Handle payment submission
+   * Creates payment and redirects to Stripe Checkout
+   */
   const handlePayment = async () => {
     if (!acceptedTerms) {
-      setError('Please accept the terms and conditions');
+      toast.error('Please accept the terms and conditions');
       return;
     }
 
     if (!user) {
+      toast.error('Please login to continue');
       navigate('/login');
       return;
     }
 
-    setLoading(true);
+    if (!booking) {
+      toast.error('Booking not found');
+      return;
+    }
+
+    setProcessing(true);
     setError('');
 
     try {
-      // Prepare flight segment data (remove id and bookingId if present)
-      const flightSegmentData = {
-        airline: selectedFlight.airline,
-        flightNumber: selectedFlight.flightNumber,
-        origin: selectedFlight.origin,
-        destination: selectedFlight.destination,
-        departTime: selectedFlight.departTime,
-        arriveTime: selectedFlight.arriveTime,
-        cabinClass: selectedFlight.cabinClass,
-        baseFare: selectedFlight.baseFare || 0,
-        taxes: selectedFlight.taxes || 0,
-      };
-
-      // Create booking
-      const bookingData = {
-        userId: user.id,
-        currency: 'AUD',
-        flightSegments: [flightSegmentData],
-        passengers: travellerInfo.passengers.map(p => ({
-          fullName: `${p.firstName} ${p.surname}`,
-          dateOfBirth: p.dateOfBirth,
-          gender: p.gender,
-          documentType: p.documentType,
-          documentNumber: p.documentNumber,
-        })),
-      };
-
-      const bookingResponse = await bookingService.createBooking(bookingData);
-      const booking = bookingResponse.data;
-
-      // Create payment
+      // Create payment request
       const paymentData = {
         bookingId: booking.id,
-        provider: paymentMethod,
-        amount: calculateTotal(),
-        transactionId: `TXN${Date.now()}`,
+        paymentMethod: paymentMethod,
+        successUrl: `${window.location.origin}/booking/confirmation/${booking.id}?payment=success`,
+        cancelUrl: `${window.location.origin}/booking/payment?booking_id=${booking.id}&payment=cancelled`,
       };
 
-      const paymentResponse = await paymentService.createPayment(paymentData);
+      // Call payment API
+      const response = await paymentService.createPayment(paymentData);
+      const payment = response.data;
       
-      // Clear local storage
-      localStorage.removeItem('selectedFlight');
-      localStorage.removeItem('travellerInfo');
-      localStorage.removeItem('extraServices');
-      localStorage.removeItem('flightSearch');
-
-      // Navigate to confirmation
-      navigate(`/booking/confirmation/${booking.id}`);
+      // Check if we have a checkout URL (for Stripe)
+      if (payment.checkoutUrl) {
+        toast.success('Redirecting to payment gateway...');
+        
+        // Store payment ID for later reference
+        localStorage.setItem('pendingPaymentId', payment.paymentId);
+        
+        // Redirect to Stripe Checkout
+        window.location.href = payment.checkoutUrl;
+      } else {
+        // For other payment methods (VNPAY, MOMO) - not yet implemented
+        toast.error(payment.message || 'Payment method not available yet. Please use Stripe.');
+      }
     } catch (err) {
-      setError(err.message || err.response?.data?.message || 'Payment failed. Please try again.');
+      console.error('Error creating payment:', err);
+      const message = err.response?.data?.message || err.message || 'Payment failed. Please try again.';
+      setError(message);
+      toast.error(message);
     } finally {
-      setLoading(false);
+      setProcessing(false);
     }
   };
 
-  if (!selectedFlight || !travellerInfo) {
-    return <div>Loading...</div>;
+  /**
+   * Calculate total amount from booking
+   */
+  const calculateTotal = () => {
+    if (!booking) return 0;
+    return booking.totalAmount || 0;
+  };
+
+  /**
+   * Format price for display
+   */
+  const formatPrice = (price) => {
+    if (!price) return '0';
+    return new Intl.NumberFormat('vi-VN').format(price);
+  };
+
+  /**
+   * Format date for display
+   */
+  const formatDate = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      weekday: 'short', 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric' 
+    });
+  };
+
+  /**
+   * Format time for display
+   */
+  const formatTime = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: false
+    });
+  };
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="payment-page">
+        <div className="loading-container">
+          <div className="loading-spinner"></div>
+          <p>Loading booking details...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state - no booking found
+  if (error && !booking) {
+    return (
+      <div className="payment-page">
+        <div className="error-container">
+          <div className="error-icon">⚠️</div>
+          <h2>Unable to Load Booking</h2>
+          <p className="error-message">{error}</p>
+          <button onClick={() => navigate('/my-bookings')} className="back-button">
+            View My Bookings
+          </button>
+        </div>
+      </div>
+    );
   }
 
   const total = calculateTotal();
+  const flightSegment = booking?.flightSegments?.[0] || null;
 
   return (
     <div className="payment-page">
+      {/* Progress Bar */}
       <div className="progress-bar">
         <div className="progress-step completed">
           <div className="step-number">1</div>
-          <span>Flight Section</span>
+          <span>Flight Selection</span>
         </div>
         <div className="progress-line"></div>
         <div className="progress-step completed">
           <div className="step-number">2</div>
-          <span>Traveller information</span>
+          <span>Traveller Information</span>
         </div>
         <div className="progress-line"></div>
         <div className="progress-step active">
@@ -193,139 +254,120 @@ const Payment = () => {
 
       <div className="payment-container">
         <div className="main-content">
-          <h2>Choose payment method</h2>
-
-          <div className="payment-methods">
-            <div className="payment-method">
-              <label>
-                <input
-                  type="radio"
-                  name="paymentMethod"
-                  value="CARD"
-                  checked={paymentMethod === 'CARD'}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                />
-                <div className="payment-method-content">
-                  <div>
-                    <strong>Debit card/ credit card</strong>
-                    <p>Up to -AU$ 25.36 discount.</p>
-                  </div>
-                  <div className="payment-logos">
-                    <span>VISA</span>
-                    <span>Mastercard</span>
-                    <span>+ More</span>
-                  </div>
-                </div>
-              </label>
+          <h2>Payment</h2>
+          
+          {/* Booking Summary */}
+          <div className="booking-summary-section">
+            <h3>Booking Summary</h3>
+            <div className="summary-item">
+              <span className="label">Booking Code:</span>
+              <span className="value"><strong>{booking.bookingCode}</strong></span>
             </div>
+            <div className="summary-item">
+              <span className="label">Status:</span>
+              <span className="value status-badge">{booking.status}</span>
+            </div>
+            {booking.holdExpiresAt && (
+              <div className="summary-item">
+                <span className="label">Hold Expires:</span>
+                <span className="value">{formatDate(booking.holdExpiresAt)}</span>
+              </div>
+            )}
+          </div>
 
-            <div className="payment-method">
-              <label>
-                <input
-                  type="radio"
-                  name="paymentMethod"
-                  value="PAYPAL"
-                  checked={paymentMethod === 'PAYPAL'}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                />
-                <div className="payment-method-content">
-                  <div>
-                    <strong>PayPal</strong>
-                    <p>You will be redirected to PayPal's login page, where you can log in to your account and complete the booking.</p>
+          {/* Payment Methods */}
+          <div className="payment-methods-section">
+            <h3>Choose Payment Method</h3>
+            <div className="payment-methods">
+              <div className="payment-method">
+                <label>
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    value="STRIPE"
+                    checked={paymentMethod === 'STRIPE'}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                  />
+                  <div className="payment-method-content">
+                    <div>
+                      <strong>Credit/Debit Card (Stripe)</strong>
+                      <p>Secure payment via Stripe. Supports VISA, Mastercard, and more.</p>
+                    </div>
+                    <div className="payment-logos">
+                      <span>💳 VISA</span>
+                      <span>💳 Mastercard</span>
+                    </div>
                   </div>
-                  <div className="payment-logos">
-                    <span>PayPal</span>
+                </label>
+              </div>
+
+              <div className="payment-method disabled">
+                <label>
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    value="VNPAY"
+                    disabled
+                    checked={paymentMethod === 'VNPAY'}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                  />
+                  <div className="payment-method-content">
+                    <div>
+                      <strong>VNPay</strong>
+                      <p className="coming-soon">Coming soon - Vietnamese payment gateway</p>
+                    </div>
+                    <div className="payment-logos">
+                      <span>🏦 VNPay</span>
+                    </div>
                   </div>
-                </div>
-              </label>
+                </label>
+              </div>
+
+              <div className="payment-method disabled">
+                <label>
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    value="MOMO"
+                    disabled
+                    checked={paymentMethod === 'MOMO'}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                  />
+                  <div className="payment-method-content">
+                    <div>
+                      <strong>Momo E-Wallet</strong>
+                      <p className="coming-soon">Coming soon - Vietnamese e-wallet</p>
+                    </div>
+                    <div className="payment-logos">
+                      <span>📱 Momo</span>
+                    </div>
+                  </div>
+                </label>
+              </div>
             </div>
           </div>
 
-          {paymentMethod === 'PAYPAL' && (
-            <div className="billing-address">
-              <h3>Billing Address</h3>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>First name *</label>
-                  <input
-                    type="text"
-                    name="firstName"
-                    value={billingAddress.firstName}
-                    onChange={handleBillingChange}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Surname *</label>
-                  <input
-                    type="text"
-                    name="surname"
-                    value={billingAddress.surname}
-                    onChange={handleBillingChange}
-                    required
-                  />
-                </div>
-              </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Street *</label>
-                  <input
-                    type="text"
-                    name="street"
-                    value={billingAddress.street}
-                    onChange={handleBillingChange}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Postcode *</label>
-                  <input
-                    type="text"
-                    name="postcode"
-                    value={billingAddress.postcode}
-                    onChange={handleBillingChange}
-                    required
-                  />
-                </div>
-              </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>City *</label>
-                  <input
-                    type="text"
-                    name="city"
-                    value={billingAddress.city}
-                    onChange={handleBillingChange}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Country *</label>
-                  <input
-                    type="text"
-                    name="country"
-                    value={billingAddress.country}
-                    onChange={handleBillingChange}
-                    required
-                  />
-                </div>
-              </div>
+          {/* Total Amount */}
+          <div className="total-amount">
+            <div className="amount-row">
+              <span className="label">Currency:</span>
+              <span className="value">{booking.currency}</span>
+            </div>
+            <div className="amount-row total">
+              <span className="label">Total Amount:</span>
+              <span className="value">{formatPrice(total)} {booking.currency}</span>
+            </div>
+          </div>
+
+          {/* Error Message */}
+          {error && (
+            <div className="error-message">
+              <span className="error-icon">⚠️</span>
+              <span>{error}</span>
             </div>
           )}
 
-          <div className="total-amount">
-            <div className="amount-row">
-              <span>Subtotal</span>
-              <span>AU$ {total.toLocaleString()}</span>
-            </div>
-            <div className="amount-row total">
-              <span>Amount to pay</span>
-              <span>AU$ {total.toLocaleString()}</span>
-            </div>
-          </div>
-
-          {error && <div className="error-message">{error}</div>}
-
+          {/* Terms and Conditions */}
           <div className="terms-section">
             <label className="checkbox-label">
               <input
@@ -334,44 +376,93 @@ const Payment = () => {
                 onChange={(e) => setAcceptedTerms(e.target.checked)}
                 required
               />
-              I have read and accept Flight Networks travel conditions, Fare Rules, the airline's general terms and conditions, 
-              and I have verified that I have entered my booking information correctly.
+              <span>
+                I have read and accept the travel conditions, fare rules, and airline's general terms and conditions. 
+                I have verified that I have entered my booking information correctly.
+              </span>
             </label>
-            <p className="terms-links">
-              You can read our <a href="/privacy">Privacy policy</a> here. Additional airline general terms and conditions is available here: 
-              <a href="/terms/virgin"> Virgin Australia</a>, <a href="/terms/qantas">Qantas Airways</a>.
+            <p className="terms-info">
+              By proceeding with payment, you agree to our <a href="/terms" target="_blank">Terms of Service</a> and <a href="/privacy" target="_blank">Privacy Policy</a>.
             </p>
           </div>
 
+          {/* Payment Button */}
           <button
             onClick={handlePayment}
             className="pay-button"
-            disabled={loading || !acceptedTerms}
+            disabled={processing || !acceptedTerms}
           >
-            {loading ? 'Processing...' : 'Pay'}
+            {processing ? (
+              <>
+                <span className="spinner"></span>
+                Processing...
+              </>
+            ) : (
+              `Pay ${formatPrice(total)} ${booking.currency}`
+            )}
           </button>
+
+          {/* Payment Info */}
+          <div className="payment-info">
+            <p className="info-text">
+              🔒 Your payment is secure and encrypted. You will be redirected to our payment partner to complete the transaction.
+            </p>
+          </div>
         </div>
 
+        {/* Order Summary Sidebar */}
         <div className="order-summary">
-          <h3>Your Order</h3>
-          <div className="order-section">
-            <div className="order-item">
-              <span className="order-icon">✈</span>
-              <div>
-                <p><strong>Departure</strong></p>
-                <p>{new Date(selectedFlight.departTime).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}</p>
-                <p>{new Date(selectedFlight.departTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} - {new Date(selectedFlight.arriveTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</p>
-                <p>{selectedFlight.origin} - {selectedFlight.destination}</p>
+          <h3>Order Summary</h3>
+          
+          {/* Flight Details */}
+          {flightSegment && (
+            <div className="order-section">
+              <div className="order-item">
+                <span className="order-icon">✈️</span>
+                <div>
+                  <p><strong>{flightSegment.airline} {flightSegment.flightNumber}</strong></p>
+                  <p className="route">{flightSegment.origin} → {flightSegment.destination}</p>
+                  <p className="date">{formatDate(flightSegment.departTime)}</p>
+                  <p className="time">
+                    {formatTime(flightSegment.departTime)} - {formatTime(flightSegment.arriveTime)}
+                  </p>
+                  <p className="cabin-class">Class: {flightSegment.cabinClass}</p>
+                </div>
               </div>
             </div>
-          </div>
+          )}
+          
+          {/* Passengers */}
+          {booking.passengers && booking.passengers.length > 0 && (
+            <div className="order-section">
+              <h4>Passengers ({booking.passengers.length})</h4>
+              {booking.passengers.map((passenger, index) => (
+                <p key={index} className="passenger-name">
+                  {index + 1}. {passenger.fullName}
+                </p>
+              ))}
+            </div>
+          )}
+          
+          {/* Price Breakdown */}
           <div className="order-section">
-            <p><strong>Bags</strong></p>
-            <p>👜 Hand baggage: 1X7 Kg</p>
-            <p>🧳 Checked baggage: 1X23 Kg</p>
-          </div>
-          <div className="order-total">
-            <p>Total: <strong>AU${total.toLocaleString()}</strong></p>
+            <h4>Price Breakdown</h4>
+            {flightSegment && (
+              <>
+                <div className="price-row">
+                  <span>Base Fare:</span>
+                  <span>{formatPrice(flightSegment.baseFare)} {booking.currency}</span>
+                </div>
+                <div className="price-row">
+                  <span>Taxes & Fees:</span>
+                  <span>{formatPrice(flightSegment.taxes)} {booking.currency}</span>
+                </div>
+              </>
+            )}
+            <div className="price-row total">
+              <span><strong>Total:</strong></span>
+              <span><strong>{formatPrice(total)} {booking.currency}</strong></span>
+            </div>
           </div>
         </div>
       </div>

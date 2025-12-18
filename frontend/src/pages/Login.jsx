@@ -31,8 +31,14 @@ const Login = () => {
     setLoading(true);
 
     try {
-      await login(formData.email, formData.password);
-      navigate('/');
+      const userData = await login(formData.email, formData.password);
+      
+      // Redirect based on user role
+      if (userData.role === 'ADMIN') {
+        navigate('/admin/dashboard');
+      } else {
+        navigate('/');
+      }
     } catch (err) {
       setError(err.message || err.response?.data?.message || 'Login failed. Please check your credentials.');
     } finally {

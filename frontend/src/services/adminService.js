@@ -29,6 +29,11 @@ export const getBookingById = async (id) => {
   return response.data;
 };
 
+export const approveBooking = async (id) => {
+  const response = await api.put(`/admin/bookings/${id}/approve`);
+  return response.data;
+};
+
 export const cancelBooking = async (id) => {
   const response = await api.put(`/admin/bookings/${id}/cancel`);
   return response.data;

@@ -84,14 +84,80 @@ public class AuthService {
         // ✅ CRITICAL: Hash password with BCrypt
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         
-        user.setPhone(request.getPhone());
-        user.setRole(request.getRole() != null ? request.getRole() : "USER");
+        user.setPhone(request.getPhone() != null ? request.getPhone().trim() : null);
+        
+        // ✅ Set role - default to "CUSTOMER" for booking system
+        String userRole = request.getRole() != null && !request.getRole().trim().isEmpty() 
+            ? request.getRole().trim().toUpperCase() 
+            : "CUSTOMER";
+        user.setRole(userRole);
+        
+        // ✅ Set status to ACTIVE by default
         user.setStatus("ACTIVE");
         
-        // Save to database
-        user = userRepository.save(user);
+        logger.debug("User entity created - ID: {}, Email: {}, Role: {}, Status: {}", 
+            user.getId(), user.getEmail(), user.getRole(), user.getStatus());
         
-        logger.info("User registered successfully: {} (ID: {})", user.getEmail(), user.getId());
+        // Save to database
+        logger.info("Saving user to database. Email: {}, Phone: {}, Role: {}", 
+            user.getEmail(), user.getPhone(), user.getRole());
+        logger.debug("User details before save - ID: {}, Email: {}, Status: {}", 
+            user.getId(), user.getEmail(), user.getStatus());
+        
+        try {
+            // ✅ CRITICAL: Flush immediately to ensure data is persisted
+            user = userRepository.save(user);
+            userRepository.flush(); // Force immediate write to database
+            
+            logger.info("✅ User saved to database. Email: {} (ID: {})", user.getEmail(), user.getId());
+            
+            // ✅ CRITICAL: Verify user was actually saved (with retry)
+            boolean exists = false;
+            for (int i = 0; i < 3; i++) {
+                exists = userRepository.existsById(user.getId());
+                if (exists) {
+                    break;
+                }
+                Thread.sleep(100); // Wait 100ms before retry
+            }
+            
+            if (!exists) {
+                logger.error("❌ CRITICAL: User was saved but does not exist in database!");
+                logger.error("   User ID: {}", user.getId());
+                logger.error("   Email: {}", user.getEmail());
+                logger.error("   This indicates a database transaction or persistence issue");
+                throw new RuntimeException("Failed to persist user to database. User was saved but not found.");
+            }
+            
+            logger.info("✅ Verified: User exists in database. ID: {}, Email: {}", 
+                user.getId(), user.getEmail());
+                
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            logger.error("❌ Database constraint violation when saving user");
+            logger.error("   Email: {}", user.getEmail());
+            logger.error("   Error: {}", e.getMessage());
+            
+            // Check if it's a duplicate email
+            if (e.getMessage() != null && e.getMessage().contains("email")) {
+                throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Email already exists"
+                );
+            }
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Failed to create user account: " + e.getMessage()
+            );
+        } catch (Exception e) {
+            logger.error("❌ Failed to save user to database");
+            logger.error("   Email: {}", user.getEmail());
+            logger.error("   User ID: {}", user.getId());
+            logger.error("   Error: {}", e.getMessage(), e);
+            throw new ResponseStatusException(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "Failed to create user account. Please try again."
+            );
+        }
         
         // ✅ CRITICAL: Convert to DTO (password excluded)
         return convertToDTO(user);

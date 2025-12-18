@@ -54,37 +54,37 @@ public class PaymentController {
      * POST /api/payments/create
      * Request: { "bookingId": "...", "paymentMethod": "STRIPE" }
      * Response: { "paymentId": "...", "checkoutUrl": "...", ... }
+     * 
+     * GlobalExceptionHandler will catch and handle exceptions
      */
     @PostMapping("/create")
     public ResponseEntity<PaymentResponse> createPayment(@Valid @RequestBody PaymentCreateRequest request) {
-        try {
-            logger.info("Received payment create request for booking: {}", request.getBookingId());
-            PaymentResponse response = paymentService.createPayment(request);
-            return ResponseEntity.ok(response);
-        } catch (RuntimeException e) {
-            logger.error("Error creating payment: {}", e.getMessage());
-            return ResponseEntity.badRequest()
-                    .body(PaymentResponse.builder()
-                            .status("ERROR")
-                            .message(e.getMessage())
-                            .build());
-        }
+        logger.info("Received payment create request for booking: {}", request.getBookingId());
+        
+        // Service will throw exception if validation fails
+        // GlobalExceptionHandler will catch and return proper error response
+        PaymentResponse response = paymentService.createPayment(request);
+        
+        logger.info("Payment created successfully: {}", response.getPaymentId());
+        return ResponseEntity.ok(response);
     }
     
     /**
      * Get payment by ID
      * 
      * GET /api/payments/{id}
+     * 
+     * GlobalExceptionHandler will handle ResourceNotFoundException
      */
     @GetMapping("/{id}")
     public ResponseEntity<Payment> getPayment(@PathVariable String id) {
-        try {
-            Payment payment = paymentService.getPaymentById(id);
-            return ResponseEntity.ok(payment);
-        } catch (RuntimeException e) {
-            logger.error("Error getting payment: {}", e.getMessage());
-            return ResponseEntity.notFound().build();
-        }
+        logger.info("Fetching payment by ID: {}", id);
+        
+        // Service will throw ResourceNotFoundException if not found
+        Payment payment = paymentService.getPaymentById(id);
+        
+        logger.info("Payment retrieved: {}", id);
+        return ResponseEntity.ok(payment);
     }
     
     /**
@@ -94,13 +94,13 @@ public class PaymentController {
      */
     @GetMapping("/booking/{bookingId}")
     public ResponseEntity<List<Payment>> getPaymentsByBooking(@PathVariable String bookingId) {
-        try {
-            List<Payment> payments = paymentService.getPaymentsByBookingId(bookingId);
-            return ResponseEntity.ok(payments);
-        } catch (RuntimeException e) {
-            logger.error("Error getting payments for booking: {}", e.getMessage());
-            return ResponseEntity.badRequest().build();
-        }
+        logger.info("Fetching payments for booking: {}", bookingId);
+        
+        // Service will throw exception if booking not found
+        List<Payment> payments = paymentService.getPaymentsByBookingId(bookingId);
+        
+        logger.info("Found {} payments for booking: {}", payments.size(), bookingId);
+        return ResponseEntity.ok(payments);
     }
     
     /**

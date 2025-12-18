@@ -1,33 +1,44 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useBooking } from '../contexts/BookingContext';
 import '../styles/pages/ExtraServices.css';
 
 const ExtraServices = () => {
+  const navigate = useNavigate();
+  const { selectedFlight, passengers, updateExtraServices } = useBooking();
+  
   const [selectedSupport, setSelectedSupport] = useState('STANDARD');
   const [medicalCover, setMedicalCover] = useState(false);
   const [collapseCover, setCollapseCover] = useState(false);
-  const [selectedFlight, setSelectedFlight] = useState(null);
   const [travellerInfo, setTravellerInfo] = useState(null);
-  const navigate = useNavigate();
 
   useEffect(() => {
-    const flight = localStorage.getItem('selectedFlight');
-    const traveller = localStorage.getItem('travellerInfo');
-    if (flight && traveller) {
-      setSelectedFlight(JSON.parse(flight));
-      setTravellerInfo(JSON.parse(traveller));
-    } else {
-      navigate('/');
+    // Check if we have required data
+    if (!selectedFlight) {
+      // Try to restore from localStorage
+      const storedFlight = localStorage.getItem('selectedFlight');
+      if (!storedFlight) {
+        navigate('/airline-info');
+        return;
+      }
     }
-  }, [navigate]);
+
+    const traveller = localStorage.getItem('travellerInfo');
+    if (traveller) {
+      setTravellerInfo(JSON.parse(traveller));
+    }
+  }, [selectedFlight, navigate]);
 
   const handleContinue = () => {
-    const extraServices = {
+    const extraServicesData = {
       supportPackage: selectedSupport,
       medicalCover,
       collapseCover,
     };
-    localStorage.setItem('extraServices', JSON.stringify(extraServices));
+    
+    // Save to BookingContext
+    updateExtraServices(extraServicesData);
+    
     navigate('/booking/payment');
   };
 

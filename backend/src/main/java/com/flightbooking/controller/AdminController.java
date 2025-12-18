@@ -4,8 +4,6 @@ import com.flightbooking.dto.BookingDTO;
 import com.flightbooking.dto.DashboardStats;
 import com.flightbooking.dto.FlightDTO;
 import com.flightbooking.dto.UserDTO;
-import com.flightbooking.entity.Booking;
-import com.flightbooking.entity.User;
 import com.flightbooking.service.AdminService;
 import com.flightbooking.service.BookingService;
 import com.flightbooking.service.FlightService;
@@ -22,7 +20,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -32,53 +29,43 @@ import java.util.Map;
  * All endpoints require ROLE_ADMIN
  * 
  * Base path: /api/admin
- * 
- * ⚠️ TEMPORARILY DISABLED ⚠️
- * This controller is commented out because it calls service methods that don't exist yet.
- * Uncomment after implementing missing methods in:
- * - BookingService: getAllBookings(Pageable), getBookingsByStatus(), getAdminBookingById(), adminCancelBooking()
- * - UserService: getAllUsers(Pageable), updateUserRole(), updateUserStatus()
- * - FlightService: getAllFlightsPaged(), createFlight(), updateFlight(), deleteFlight()
  */
-// ⚠️ TEMPORARILY DISABLED - Uncomment after implementing all service methods ⚠️
-// @RestController
-// @RequestMapping("/api/admin")
-// @CrossOrigin(origins = {"http://localhost:3000", "http://localhost:5173", "http://localhost:5174"})
-// @PreAuthorize("hasRole('ADMIN')")
+@RestController
+@RequestMapping("/api/admin")
+@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:5173", "http://localhost:5174"})
+@PreAuthorize("hasRole('ADMIN')")
 public class AdminController {
     
     private static final Logger logger = LoggerFactory.getLogger(AdminController.class);
     
-    // @Autowired
+    @Autowired
     private AdminService adminService;
     
-    // @Autowired
+    @Autowired
     private BookingService bookingService;
     
-    // @Autowired
+    @Autowired
     private UserService userService;
     
-    // @Autowired
+    @Autowired
     private FlightService flightService;
     
     /**
      * Get dashboard statistics
      * GET /api/admin/dashboard
      */
-    // @GetMapping("/dashboard")
+    @GetMapping("/dashboard")
     public ResponseEntity<DashboardStats> getDashboardStats() {
-        // TODO: Uncomment after AdminService is complete
-        throw new UnsupportedOperationException("Admin endpoints are temporarily disabled");
-        // logger.info("Admin: Fetching dashboard statistics");
-        // DashboardStats stats = adminService.getDashboardStats();
-        // return ResponseEntity.ok(stats);
+        logger.info("Admin: Fetching dashboard statistics");
+        DashboardStats stats = adminService.getDashboardStats();
+        return ResponseEntity.ok(stats);
     }
     
     /**
      * Get all bookings (with pagination and filters)
      * GET /api/admin/bookings?page=0&size=20&status=CONFIRMED
      */
-    // @GetMapping("/bookings")
+    @GetMapping("/bookings")
     public ResponseEntity<Page<BookingDTO>> getAllBookings(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
@@ -111,10 +98,30 @@ public class AdminController {
     }
     
     /**
+     * Approve booking (admin only)
+     * PUT /api/admin/bookings/{id}/approve
+     * 
+     * Approves a booking by changing status to CONFIRMED
+     * Can approve from PENDING or PENDING_PAYMENT status
+     */
+    @PutMapping("/bookings/{id}/approve")
+    public ResponseEntity<Map<String, String>> approveBooking(@PathVariable String id) {
+        logger.info("Admin: Approving booking: {}", id);
+        BookingDTO booking = bookingService.adminApproveBooking(id);
+        
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "Booking approved successfully");
+        response.put("bookingId", id);
+        response.put("status", booking.getStatus());
+        
+        return ResponseEntity.ok(response);
+    }
+    
+    /**
      * Cancel booking (admin override)
      * PUT /api/admin/bookings/{id}/cancel
      */
-    // @PutMapping("/bookings/{id}/cancel")
+    @PutMapping("/bookings/{id}/cancel")
     public ResponseEntity<Map<String, String>> cancelBooking(@PathVariable String id) {
         logger.info("Admin: Cancelling booking: {}", id);
         bookingService.adminCancelBooking(id);
@@ -130,7 +137,7 @@ public class AdminController {
      * Get all users (with pagination)
      * GET /api/admin/users?page=0&size=20
      */
-    // @GetMapping("/users")
+    @GetMapping("/users")
     public ResponseEntity<Page<UserDTO>> getAllUsers(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
@@ -147,7 +154,7 @@ public class AdminController {
      * Get user by ID
      * GET /api/admin/users/{id}
      */
-    // @GetMapping("/users/{id}")
+    @GetMapping("/users/{id}")
     public ResponseEntity<UserDTO> getUser(@PathVariable String id) {
         logger.info("Admin: Fetching user: {}", id);
         UserDTO user = userService.getUserById(id);
@@ -159,7 +166,7 @@ public class AdminController {
      * PUT /api/admin/users/{id}/role
      * Body: { "role": "ROLE_ADMIN" }
      */
-    // @PutMapping("/users/{id}/role")
+    @PutMapping("/users/{id}/role")
     public ResponseEntity<Map<String, String>> updateUserRole(
             @PathVariable String id,
             @RequestBody Map<String, String> request) {
@@ -182,7 +189,7 @@ public class AdminController {
      * PUT /api/admin/users/{id}/status
      * Body: { "status": "INACTIVE" or "ACTIVE" }
      */
-    // @PutMapping("/users/{id}/status")
+    @PutMapping("/users/{id}/status")
     public ResponseEntity<Map<String, String>> updateUserStatus(
             @PathVariable String id,
             @RequestBody Map<String, String> request) {
@@ -204,7 +211,7 @@ public class AdminController {
      * Get all flights (admin view - all flights)
      * GET /api/admin/flights?page=0&size=20
      */
-    // @GetMapping("/flights")
+    @GetMapping("/flights")
     public ResponseEntity<Page<FlightDTO>> getAllFlights(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
@@ -221,7 +228,7 @@ public class AdminController {
      * Create new flight
      * POST /api/admin/flights
      */
-    // @PostMapping("/flights")
+    @PostMapping("/flights")
     public ResponseEntity<FlightDTO> createFlight(@RequestBody FlightDTO flightDTO) {
         logger.info("Admin: Creating new flight");
         FlightDTO created = flightService.createFlight(flightDTO);
@@ -232,7 +239,7 @@ public class AdminController {
      * Update flight
      * PUT /api/admin/flights/{id}
      */
-    // @PutMapping("/flights/{id}")
+    @PutMapping("/flights/{id}")
     public ResponseEntity<FlightDTO> updateFlight(
             @PathVariable String id,
             @RequestBody FlightDTO flightDTO) {
@@ -246,7 +253,7 @@ public class AdminController {
      * Delete flight
      * DELETE /api/admin/flights/{id}
      */
-    // @DeleteMapping("/flights/{id}")
+    @DeleteMapping("/flights/{id}")
     public ResponseEntity<Map<String, String>> deleteFlight(@PathVariable String id) {
         logger.info("Admin: Deleting flight: {}", id);
         flightService.deleteFlight(id);

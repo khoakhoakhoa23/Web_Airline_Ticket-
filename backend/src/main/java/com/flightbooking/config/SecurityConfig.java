@@ -1,21 +1,31 @@
 package com.flightbooking.config;
 
+import com.flightbooking.dto.ErrorResponse;
 import com.flightbooking.filter.JwtAuthenticationFilter;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 
@@ -77,6 +87,77 @@ public class SecurityConfig {
     }
     
     /**
+     * ✅ CRITICAL: AuthenticationEntryPoint to handle unauthenticated requests
+     * 
+     * Returns 401 UNAUTHORIZED instead of 404 when user is not authenticated
+     */
+    @Bean
+    public AuthenticationEntryPoint authenticationEntryPoint() {
+        return new AuthenticationEntryPoint() {
+            @Override
+            public void commence(HttpServletRequest request, 
+                               HttpServletResponse response,
+                               AuthenticationException authException) throws IOException {
+                
+                response.setStatus(HttpStatus.UNAUTHORIZED.value());
+                response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                response.setCharacterEncoding("UTF-8");
+                
+                ErrorResponse errorResponse = ErrorResponse.builder()
+                    .timestamp(LocalDateTime.now())
+                    .status(HttpStatus.UNAUTHORIZED.value())
+                    .error("UNAUTHORIZED")
+                    .message(authException != null && authException.getMessage() != null 
+                        ? authException.getMessage() 
+                        : "User not authenticated. Please login to continue.")
+                    .path(request.getRequestURI())
+                    .build();
+                
+                response.getWriter().write(
+                    "{\"timestamp\":\"" + errorResponse.getTimestamp() + "\"," +
+                    "\"status\":" + errorResponse.getStatus() + "," +
+                    "\"error\":\"" + errorResponse.getError() + "\"," +
+                    "\"message\":\"" + errorResponse.getMessage() + "\"," +
+                    "\"path\":\"" + errorResponse.getPath() + "\"}"
+                );
+            }
+        };
+    }
+    
+    /**
+     * ✅ CRITICAL: AccessDeniedHandler to handle unauthorized requests
+     * 
+     * Returns 403 FORBIDDEN when user is authenticated but doesn't have permission
+     */
+    @Bean
+    public AccessDeniedHandler accessDeniedHandler() {
+        return (HttpServletRequest request, 
+                HttpServletResponse response,
+                org.springframework.security.access.AccessDeniedException accessDeniedException) -> {
+            
+            response.setStatus(HttpStatus.FORBIDDEN.value());
+            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+            response.setCharacterEncoding("UTF-8");
+            
+            ErrorResponse errorResponse = ErrorResponse.builder()
+                .timestamp(LocalDateTime.now())
+                .status(HttpStatus.FORBIDDEN.value())
+                .error("FORBIDDEN")
+                .message("You do not have permission to access this resource")
+                .path(request.getRequestURI())
+                .build();
+            
+            response.getWriter().write(
+                "{\"timestamp\":\"" + errorResponse.getTimestamp() + "\"," +
+                "\"status\":" + errorResponse.getStatus() + "," +
+                "\"error\":\"" + errorResponse.getError() + "\"," +
+                "\"message\":\"" + errorResponse.getMessage() + "\"," +
+                "\"path\":\"" + errorResponse.getPath() + "\"}"
+            );
+        };
+    }
+    
+    /**
      * Security Filter Chain
      */
     @Bean
@@ -110,6 +191,12 @@ public class SecurityConfig {
                 
                 // ✅ All other endpoints require JWT authentication
                 .anyRequest().authenticated()
+            )
+            
+            // ✅ CRITICAL: Set AuthenticationEntryPoint to return 401 for unauthenticated requests
+            .exceptionHandling(exceptions -> exceptions
+                .authenticationEntryPoint(authenticationEntryPoint())
+                .accessDeniedHandler(accessDeniedHandler())
             )
             
             // Add JWT filter before Spring Security's authentication filter

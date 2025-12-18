@@ -64,8 +64,14 @@ const Register = () => {
       };
       
       console.log('Registering with data:', registerData);
-      await register(registerData);
-      navigate('/');
+      const userData = await register(registerData);
+      
+      // Redirect based on user role
+      if (userData.role === 'ADMIN') {
+        navigate('/admin/dashboard');
+      } else {
+        navigate('/');
+      }
     } catch (err) {
       // Handle validation errors
       if (err.validationErrors) {

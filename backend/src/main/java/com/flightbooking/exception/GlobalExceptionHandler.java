@@ -13,6 +13,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
@@ -122,7 +123,89 @@ public class GlobalExceptionHandler {
     }
     
     /**
+     * ✅ CRITICAL: Explicitly handle AuthenticationCredentialsNotFoundException FIRST
+     * 
+     * ⚠️ MUST be placed BEFORE ResourceNotFoundException handler to ensure 401 is returned
+     * This ensures that AuthenticationCredentialsNotFoundException is ALWAYS caught
+     * and returns 401, not 404
+     */
+    @ExceptionHandler(org.springframework.security.authentication.AuthenticationCredentialsNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleAuthenticationCredentialsNotFoundException(
+            org.springframework.security.authentication.AuthenticationCredentialsNotFoundException ex,
+            HttpServletRequest request) {
+        
+        logger.error("❌ AuthenticationCredentialsNotFoundException on {} {}: {}", 
+            request.getMethod(), request.getRequestURI(), ex.getMessage());
+        logger.error("Stack trace:", ex);
+        
+        ErrorResponse errorResponse = ErrorResponse.of(
+                HttpStatus.UNAUTHORIZED.value(),
+                "UNAUTHORIZED",
+                ex.getMessage() != null ? ex.getMessage() : "User not authenticated. Please login to continue.",
+                request.getRequestURI()
+        );
+        
+        logger.error("✅ Returning 401 UNAUTHORIZED for AuthenticationCredentialsNotFoundException");
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
+    }
+    
+    /**
+     * ✅ Handle authentication exceptions (401 Unauthorized)
+     * 
+     * Catches:
+     * - AuthenticationCredentialsNotFoundException (handled above, but this is a fallback)
+     * - Other Spring Security authentication exceptions
+     * 
+     * ⚠️ CRITICAL: This handler MUST catch AuthenticationCredentialsNotFoundException
+     * to return 401 instead of 404
+     */
+    @ExceptionHandler(org.springframework.security.core.AuthenticationException.class)
+    public ResponseEntity<ErrorResponse> handleAuthenticationException(
+            org.springframework.security.core.AuthenticationException ex,
+            HttpServletRequest request) {
+        
+        logger.error("❌ Authentication error on {} {}: {}", 
+            request.getMethod(), request.getRequestURI(), ex.getMessage());
+        logger.error("Exception type: {}", ex.getClass().getName());
+        logger.error("Stack trace:", ex);
+        
+        // ✅ CRITICAL: Always return 401 for authentication exceptions
+        ErrorResponse errorResponse = ErrorResponse.of(
+                HttpStatus.UNAUTHORIZED.value(),
+                "UNAUTHORIZED",
+                ex.getMessage() != null ? ex.getMessage() : "User not authenticated. Please login to continue.",
+                request.getRequestURI()
+        );
+        
+        logger.error("✅ Returning 401 UNAUTHORIZED for authentication error");
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
+    }
+    
+    /**
+     * Handle bad credentials (login failure)
+     */
+    @ExceptionHandler(BadCredentialsException.class)
+    public ResponseEntity<ErrorResponse> handleBadCredentialsException(
+            BadCredentialsException ex,
+            HttpServletRequest request) {
+        
+        logger.warn("Bad credentials on {}: {}", request.getRequestURI(), ex.getMessage());
+        
+        ErrorResponse errorResponse = ErrorResponse.of(
+                HttpStatus.UNAUTHORIZED.value(),
+                "UNAUTHORIZED",
+                "Invalid email or password",
+                request.getRequestURI()
+        );
+        
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
+    }
+    
+    /**
      * Handle resource not found
+     * 
+     * ⚠️ NOTE: This should NOT catch AuthenticationCredentialsNotFoundException
+     * Authentication exceptions are handled above
      */
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleResourceNotFoundException(
@@ -179,26 +262,6 @@ public class GlobalExceptionHandler {
         );
         
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(errorResponse);
-    }
-    
-    /**
-     * Handle bad credentials (login failure)
-     */
-    @ExceptionHandler(BadCredentialsException.class)
-    public ResponseEntity<ErrorResponse> handleBadCredentialsException(
-            BadCredentialsException ex,
-            HttpServletRequest request) {
-        
-        logger.warn("Bad credentials on {}: {}", request.getRequestURI(), ex.getMessage());
-        
-        ErrorResponse errorResponse = ErrorResponse.of(
-                HttpStatus.UNAUTHORIZED.value(),
-                "UNAUTHORIZED",
-                "Invalid email or password",
-                request.getRequestURI()
-        );
-        
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errorResponse);
     }
     
     /**
@@ -264,14 +327,91 @@ public class GlobalExceptionHandler {
     }
     
     /**
+     * ✅ CRITICAL: Handle database integrity violations (foreign key constraints, unique constraints, etc.)
+     * 
+     * This prevents 500 errors from database constraint violations.
+     * Common cases:
+     * - Foreign key constraint: User ID not found in users table
+     * - Unique constraint: Duplicate booking code
+     * - Not null constraint: Required field is null
+     * 
+     * Returns 400 (BAD_REQUEST) or 404 (NOT_FOUND) instead of 500
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrityViolationException(
+            DataIntegrityViolationException ex,
+            HttpServletRequest request) {
+        
+        String errorMessage = ex.getMessage();
+        String userFriendlyMessage = "Data validation failed. Please check your input.";
+        String errorCode = "DATA_INTEGRITY_ERROR";
+        HttpStatus status = HttpStatus.BAD_REQUEST;
+        
+        // ✅ Parse specific constraint violations
+        if (errorMessage != null) {
+            logger.error("Data integrity violation on {}: {}", request.getRequestURI(), errorMessage);
+            
+            // Foreign key constraint violations
+            if (errorMessage.contains("user_id") && errorMessage.contains("not present")) {
+                errorCode = "USER_NOT_FOUND";
+                userFriendlyMessage = "User account not found. Please register or login again.";
+                status = HttpStatus.NOT_FOUND;
+            } else if (errorMessage.contains("foreign key constraint")) {
+                errorCode = "FOREIGN_KEY_VIOLATION";
+                userFriendlyMessage = "Referenced resource not found. Please check your data.";
+                status = HttpStatus.BAD_REQUEST;
+            } 
+            // Unique constraint violations
+            else if (errorMessage.contains("unique constraint") || errorMessage.contains("duplicate key")) {
+                errorCode = "DUPLICATE_ENTRY";
+                userFriendlyMessage = "This record already exists. Please use a different value.";
+                status = HttpStatus.CONFLICT;
+            }
+            // Not null constraint violations
+            else if (errorMessage.contains("not-null") || errorMessage.contains("null value")) {
+                errorCode = "NULL_CONSTRAINT_VIOLATION";
+                userFriendlyMessage = "Required field is missing. Please fill in all required fields.";
+                status = HttpStatus.BAD_REQUEST;
+            }
+        } else {
+            logger.error("Data integrity violation on {}: (no message)", request.getRequestURI());
+        }
+        
+        ErrorResponse errorResponse = ErrorResponse.builder()
+                .timestamp(java.time.LocalDateTime.now())
+                .status(status.value())
+                .error("DATA_INTEGRITY_ERROR")
+                .errorCode(errorCode)
+                .message(userFriendlyMessage)
+                .path(request.getRequestURI())
+                .build();
+        
+        return ResponseEntity.status(status).body(errorResponse);
+    }
+    
+    /**
      * Handle all other exceptions (fallback)
+     * 
+     * ⚠️ This should be the last handler to catch any unhandled exceptions
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(
             Exception ex,
             HttpServletRequest request) {
         
-        logger.error("Unexpected error on {}: {}", request.getRequestURI(), ex.getMessage(), ex);
+        // ✅ Enhanced logging with stack trace for debugging
+        logger.error("Unexpected error on {} {}: {}", 
+            request.getMethod(), 
+            request.getRequestURI(), 
+            ex.getMessage(), 
+            ex);
+        
+        // ✅ Log request details for debugging
+        logger.error("Request details - Method: {}, URI: {}, Query: {}, RemoteAddr: {}", 
+            request.getMethod(),
+            request.getRequestURI(),
+            request.getQueryString(),
+            request.getRemoteAddr());
         
         ErrorResponse errorResponse = ErrorResponse.of(
                 HttpStatus.INTERNAL_SERVER_ERROR.value(),

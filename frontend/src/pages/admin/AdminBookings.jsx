@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getAllBookings, cancelBooking } from '../../services/adminService';
+import { getAllBookings, approveBooking, cancelBooking } from '../../services/adminService';
 import './AdminBookings.css';
 
 const AdminBookings = () => {
@@ -27,6 +27,20 @@ const AdminBookings = () => {
       setError('Failed to load bookings');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleApproveBooking = async (id) => {
+    if (!confirm('Are you sure you want to approve this booking?')) return;
+
+    try {
+      await approveBooking(id);
+      alert('Booking approved successfully');
+      loadBookings();
+    } catch (err) {
+      console.error('Failed to approve booking:', err);
+      const errorMessage = err.response?.data?.message || err.message || 'Failed to approve booking';
+      alert('Failed to approve booking: ' + errorMessage);
     }
   };
 
@@ -159,6 +173,15 @@ const AdminBookings = () => {
                     >
                       👁️
                     </button>
+                    {(booking.status === 'PENDING' || booking.status === 'PENDING_PAYMENT') && (
+                      <button 
+                        onClick={() => handleApproveBooking(booking.id)}
+                        className="action-btn approve"
+                        title="Approve booking"
+                      >
+                        ✅
+                      </button>
+                    )}
                     {booking.status !== 'CANCELLED' && (
                       <button 
                         onClick={() => handleCancelBooking(booking.id)}

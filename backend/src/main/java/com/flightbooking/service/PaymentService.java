@@ -4,6 +4,9 @@ import com.flightbooking.dto.PaymentCreateRequest;
 import com.flightbooking.dto.PaymentResponse;
 import com.flightbooking.entity.Booking;
 import com.flightbooking.entity.Payment;
+import com.flightbooking.exception.BusinessException;
+import com.flightbooking.exception.PaymentFailedException;
+import com.flightbooking.exception.ResourceNotFoundException;
 import com.flightbooking.repository.BookingRepository;
 import com.flightbooking.repository.PaymentRepository;
 import com.stripe.Stripe;
@@ -70,25 +73,34 @@ public class PaymentService {
         
         // 1. Validate booking exists
         Booking booking = bookingRepository.findById(request.getBookingId())
-                .orElseThrow(() -> new RuntimeException("Booking not found with ID: " + request.getBookingId()));
+                .orElseThrow(() -> new ResourceNotFoundException("Booking not found with ID: " + request.getBookingId()));
         
         // 2. Validate booking status
         if ("CONFIRMED".equals(booking.getStatus())) {
-            throw new RuntimeException("Booking is already confirmed and paid");
+            throw new BusinessException("ALREADY_PAID", "Booking is already confirmed and paid");
         }
         
         if ("CANCELLED".equals(booking.getStatus())) {
-            throw new RuntimeException("Cannot create payment for cancelled booking");
+            throw new BusinessException("BOOKING_CANCELLED", "Cannot create payment for cancelled booking");
+        }
+        
+        if ("COMPLETED".equals(booking.getStatus())) {
+            throw new BusinessException("BOOKING_COMPLETED", "Cannot create payment for completed booking");
         }
         
         // 3. Check if booking already has successful payment
         boolean hasSuccessfulPayment = paymentRepository.existsByBookingIdAndStatus(
                 request.getBookingId(), "SUCCESS");
         if (hasSuccessfulPayment) {
-            throw new RuntimeException("Booking already has a successful payment");
+            throw new BusinessException("DUPLICATE_PAYMENT", "Booking already has a successful payment");
         }
         
-        // 4. Create payment based on payment method
+        // 4. Validate payment method
+        if (request.getPaymentMethod() == null || request.getPaymentMethod().trim().isEmpty()) {
+            throw new BusinessException("INVALID_PAYMENT_METHOD", "Payment method is required");
+        }
+        
+        // 5. Create payment based on payment method
         PaymentResponse response;
         switch (request.getPaymentMethod()) {
             case "STRIPE":
@@ -101,7 +113,7 @@ public class PaymentService {
                 response = createMomoPayment(booking, request);
                 break;
             default:
-                throw new RuntimeException("Unsupported payment method: " + request.getPaymentMethod());
+                throw new BusinessException("UNSUPPORTED_PAYMENT_METHOD", "Unsupported payment method: " + request.getPaymentMethod());
         }
         
         logger.info("Payment created successfully: {}", response.getPaymentId());
@@ -196,7 +208,7 @@ public class PaymentService {
             
         } catch (StripeException e) {
             logger.error("Stripe error creating payment: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to create Stripe payment: " + e.getMessage());
+            throw new PaymentFailedException("STRIPE_ERROR", "Failed to create Stripe payment: " + e.getMessage());
         }
     }
     
@@ -211,7 +223,7 @@ public class PaymentService {
         // 3. Return payment URL
         
         logger.warn("VNPay payment not yet implemented");
-        throw new RuntimeException("VNPay payment is not yet implemented. Please use STRIPE.");
+        throw new BusinessException("NOT_IMPLEMENTED", "VNPay payment is not yet implemented. Please use STRIPE.");
     }
     
     /**
@@ -225,15 +237,16 @@ public class PaymentService {
         // 3. Return payment URL
         
         logger.warn("Momo payment not yet implemented");
-        throw new RuntimeException("Momo payment is not yet implemented. Please use STRIPE.");
+        throw new BusinessException("NOT_IMPLEMENTED", "Momo payment is not yet implemented. Please use STRIPE.");
     }
     
     /**
      * Get payment by ID
      */
+    @Transactional(readOnly = true)
     public Payment getPaymentById(String paymentId) {
         return paymentRepository.findById(paymentId)
-                .orElseThrow(() -> new RuntimeException("Payment not found with ID: " + paymentId));
+                .orElseThrow(() -> new ResourceNotFoundException("Payment not found with ID: " + paymentId));
     }
     
     /**
@@ -250,7 +263,7 @@ public class PaymentService {
     @Transactional
     public void updatePaymentStatus(String paymentId, String status, String failureReason) {
         Payment payment = paymentRepository.findById(paymentId)
-                .orElseThrow(() -> new RuntimeException("Payment not found with ID: " + paymentId));
+                .orElseThrow(() -> new ResourceNotFoundException("Payment not found with ID: " + paymentId));
         
         payment.setStatus(status);
         if (failureReason != null) {
