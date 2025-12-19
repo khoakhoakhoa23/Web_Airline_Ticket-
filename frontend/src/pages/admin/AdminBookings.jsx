@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { getAllBookings, approveBooking, cancelBooking } from '../../services/adminService';
+import { getAllBookings, approveBooking, cancelBooking, getPendingNotifications } from '../../services/adminService';
+import { toast } from 'react-toastify';
 import './AdminBookings.css';
 
 const AdminBookings = () => {
@@ -10,9 +11,18 @@ const AdminBookings = () => {
   const [totalPages, setTotalPages] = useState(0);
   const [statusFilter, setStatusFilter] = useState('');
   const [selectedBooking, setSelectedBooking] = useState(null);
+  const [pendingNotifications, setPendingNotifications] = useState([]);
 
   useEffect(() => {
     loadBookings();
+    loadPendingNotifications();
+    
+    // Refresh notifications every 10 seconds
+    const interval = setInterval(() => {
+      loadPendingNotifications();
+    }, 10000);
+    
+    return () => clearInterval(interval);
   }, [page, statusFilter]);
 
   const loadBookings = async () => {
@@ -30,17 +40,27 @@ const AdminBookings = () => {
     }
   };
 
+  const loadPendingNotifications = async () => {
+    try {
+      const notifications = await getPendingNotifications();
+      setPendingNotifications(notifications || []);
+    } catch (err) {
+      console.error('Failed to load notifications:', err);
+    }
+  };
+
   const handleApproveBooking = async (id) => {
     if (!confirm('Are you sure you want to approve this booking?')) return;
 
     try {
       await approveBooking(id);
-      alert('Booking approved successfully');
+      toast.success('Booking approved successfully');
       loadBookings();
+      loadPendingNotifications();
     } catch (err) {
       console.error('Failed to approve booking:', err);
       const errorMessage = err.response?.data?.message || err.message || 'Failed to approve booking';
-      alert('Failed to approve booking: ' + errorMessage);
+      toast.error('Failed to approve booking: ' + errorMessage);
     }
   };
 
@@ -107,9 +127,28 @@ const AdminBookings = () => {
           <h2 className="page-title">Booking Management</h2>
           <p className="page-subtitle">View and manage all flight bookings</p>
         </div>
-        <button onClick={loadBookings} className="refresh-btn">
-          🔄 Refresh
-        </button>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          {pendingNotifications.length > 0 && (
+            <div className="notification-badge" style={{
+              background: '#f59e0b',
+              color: 'white',
+              padding: '8px 16px',
+              borderRadius: '20px',
+              fontWeight: '600',
+              fontSize: '14px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              animation: 'pulse 2s infinite'
+            }}>
+              <span>🔔</span>
+              <span>{pendingNotifications.length} booking{pendingNotifications.length > 1 ? 's' : ''} cần duyệt</span>
+            </div>
+          )}
+          <button onClick={loadBookings} className="refresh-btn">
+            🔄 Refresh
+          </button>
+        </div>
       </div>
 
       {/* Filters */}

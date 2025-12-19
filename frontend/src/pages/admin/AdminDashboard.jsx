@@ -26,11 +26,19 @@ const AdminDashboard = () => {
   };
 
   const formatCurrency = (amount) => {
-    if (!amount) return '0 VND';
+    if (!amount && amount !== 0) return '0 VND';
+    
+    // Handle both number and string (BigDecimal from backend might be string)
+    const numAmount = typeof amount === 'string' ? parseFloat(amount) : Number(amount);
+    
+    if (isNaN(numAmount)) return '0 VND';
+    
     return new Intl.NumberFormat('vi-VN', {
       style: 'currency',
-      currency: 'VND'
-    }).format(amount);
+      currency: 'VND',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(numAmount);
   };
 
   const statCards = [

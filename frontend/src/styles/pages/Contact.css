@@ -1,0 +1,96 @@
+.contact-page {
+  min-height: 60vh;
+  padding: 3rem 0;
+  background: linear-gradient(to bottom, #f5f7fa 0%, #ffffff 100%);
+}
+
+.contact-container {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 0 2rem;
+}
+
+.contact-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #1a237e;
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+
+.contact-subtitle {
+  text-align: center;
+  color: #666;
+  font-size: 1.1rem;
+  margin-bottom: 3rem;
+}
+
+.contact-content {
+  margin-top: 2rem;
+}
+
+.contact-info {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 2rem;
+}
+
+.contact-card {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  text-align: center;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.contact-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 12px rgba(0, 0, 0, 0.15);
+}
+
+.contact-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.contact-card h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1a237e;
+  margin-bottom: 0.5rem;
+}
+
+.contact-card p {
+  color: #666;
+  margin-bottom: 1rem;
+  font-size: 0.95rem;
+}
+
+.contact-link {
+  color: #1a237e;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.3s ease;
+}
+
+.contact-link:hover {
+  color: #e53935;
+  text-decoration: underline;
+}
+
+.contact-text {
+  color: #1a237e;
+  font-weight: 500;
+}
+
+@media (max-width: 768px) {
+  .contact-title {
+    font-size: 2rem;
+  }
+
+  .contact-info {
+    grid-template-columns: 1fr;
+  }
+}
+

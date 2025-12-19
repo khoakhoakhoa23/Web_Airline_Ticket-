@@ -12,6 +12,9 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 @AllArgsConstructor
 public class CreateSeatSelectionRequest {
+    @NotBlank(message = "Booking ID is required")
+    private String bookingId;
+    
     @NotBlank(message = "Passenger ID is required")
     private String passengerId;
     

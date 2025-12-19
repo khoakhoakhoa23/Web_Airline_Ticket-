@@ -2,11 +2,40 @@
   min-height: 100vh;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   padding: 40px 20px;
+  animation: fadeIn 0.5s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .confirmation-container {
-  max-width: 900px;
+  max-width: 1000px;
   margin: 0 auto;
+  animation: slideUp 0.6s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(30px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 0.5rem;
+  font-size: 1rem;
 }
 
 /* ==================== LOADING ==================== */
@@ -42,11 +71,34 @@
   padding: 60px 40px;
   text-align: center;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  animation: slideDown 0.5s ease-out;
+  max-width: 600px;
+  margin: 0 auto;
 }
 
 .error-icon {
   font-size: 80px;
   margin-bottom: 24px;
+  animation: scaleIn 0.5s ease-out;
+}
+
+.error-icon.forbidden {
+  animation: shake 0.5s ease-in-out;
+}
+
+.error-icon.unauthorized {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-10px); }
+  75% { transform: translateX(10px); }
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.1); opacity: 0.8; }
 }
 
 .error-container h2 {
@@ -55,24 +107,54 @@
   color: #dc2626;
 }
 
-.error-container p {
+.error-container .error-message {
   font-size: 16px;
   color: #64748b;
   margin-bottom: 32px;
+  line-height: 1.6;
+  padding: 0 20px;
+}
+
+.error-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.error-actions .btn-primary,
+.error-actions .btn-outline {
+  min-width: 160px;
 }
 
 /* ==================== SUCCESS BANNER ==================== */
 
-.success-banner {
+.success-banner,
+.pending-banner,
+.cancelled-banner {
   background: white;
   border-radius: 20px;
   padding: 48px 40px;
   text-align: center;
   margin-bottom: 32px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  animation: slideDown 0.5s ease-out;
 }
 
-.success-icon {
+@keyframes slideDown {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.success-icon,
+.pending-icon,
+.cancelled-icon {
   font-size: 80px;
   margin-bottom: 24px;
   animation: scaleIn 0.5s ease-out;
@@ -102,6 +184,32 @@
   margin: 0;
 }
 
+.pending-title {
+  font-size: 36px;
+  font-weight: 800;
+  color: #f59e0b;
+  margin: 0 0 16px 0;
+}
+
+.pending-subtitle {
+  font-size: 18px;
+  color: #64748b;
+  margin: 0;
+}
+
+.cancelled-title {
+  font-size: 36px;
+  font-weight: 800;
+  color: #ef4444;
+  margin: 0 0 16px 0;
+}
+
+.cancelled-subtitle {
+  font-size: 18px;
+  color: #64748b;
+  margin: 0;
+}
+
 /* ==================== BOOKING CODE ==================== */
 
 .booking-code-section {
@@ -111,6 +219,7 @@
   margin-bottom: 32px;
   text-align: center;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  animation: slideUp 0.6s ease-out 0.2s both;
 }
 
 .booking-code-section h2 {
@@ -118,6 +227,54 @@
   font-weight: 700;
   color: #1e293b;
   margin: 0 0 20px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.status-badge-container {
+  margin: 20px 0;
+}
+
+.status-badge-large {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: 24px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.status-badge-large.confirmed {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  animation: pulse-success 2s ease-in-out infinite;
+}
+
+.status-badge-large.pending {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: white;
+  animation: pulse-warning 2s ease-in-out infinite;
+}
+
+.status-badge-large.cancelled {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+}
+
+@keyframes pulse-success {
+  0%, 100% { box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4); }
+  50% { box-shadow: 0 4px 16px rgba(16, 185, 129, 0.6); }
+}
+
+@keyframes pulse-warning {
+  0%, 100% { box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4); }
+  50% { box-shadow: 0 4px 16px rgba(245, 158, 11, 0.6); }
 }
 
 .booking-code {
@@ -142,19 +299,27 @@
 
 .copy-btn {
   padding: 12px 24px;
-  background: #3b82f6;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
   color: white;
   border: none;
   border-radius: 10px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
 }
 
 .copy-btn:hover {
-  background: #2563eb;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.copy-btn:active {
+  transform: translateY(0);
 }
 
 .code-note {
@@ -171,6 +336,7 @@
   padding: 32px;
   margin-bottom: 32px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  animation: slideUp 0.6s ease-out 0.3s both;
 }
 
 .booking-details-section h2 {
@@ -185,6 +351,9 @@
   font-weight: 600;
   color: #1e293b;
   margin: 32px 0 16px 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 /* ==================== FLIGHT CARD ==================== */
@@ -309,7 +478,53 @@
   font-size: 18px;
   font-weight: 700;
   color: #1e293b;
-  margin: 0 0 8px 0;
+  margin: 0 0 12px 0;
+}
+
+.passenger-details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.detail-item.highlight {
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border: 2px solid #3b82f6;
+}
+
+.detail-label {
+  font-size: 0.75rem;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.detail-value {
+  font-size: 0.95rem;
+  color: #1e293b;
+  font-weight: 600;
+}
+
+.detail-value.seat-number {
+  font-size: 1.2rem;
+  color: #3b82f6;
+  font-weight: 700;
+  letter-spacing: 1px;
 }
 
 .passenger-details {
@@ -326,6 +541,13 @@
   border-top: 2px solid #e2e8f0;
 }
 
+.summary-content {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  padding: 24px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
 .summary-row {
   display: flex;
   justify-content: space-between;
@@ -333,18 +555,61 @@
   padding: 12px 0;
   font-size: 16px;
   color: #64748b;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.summary-row:last-child {
+  border-bottom: none;
+}
+
+.summary-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+}
+
+.summary-value {
+  font-weight: 600;
+  color: #1e293b;
 }
 
 .summary-row.total {
-  padding-top: 16px;
+  padding-top: 20px;
   border-top: 2px solid #e2e8f0;
-  margin-top: 8px;
+  margin-top: 12px;
   font-size: 24px;
   color: #1e293b;
 }
 
+.summary-row.total .summary-value.total-amount {
+  font-size: 28px;
+  color: #10b981;
+  font-weight: 800;
+}
+
 .summary-row.total strong {
   font-weight: 800;
+}
+
+.expiry-warning {
+  margin-top: 16px;
+  padding: 12px 16px;
+  background: #fef3c7;
+  border: 1px solid #fbbf24;
+  border-radius: 8px;
+  color: #92400e;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  animation: blink 1.5s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
 }
 
 .payment-status {
@@ -395,6 +660,10 @@
 .btn-primary {
   background: linear-gradient(135deg, #3b82f6, #8b5cf6);
   color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
 }
 
 .btn-primary:hover {
@@ -402,25 +671,45 @@
   box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4);
 }
 
+.btn-primary.payment-btn {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  grid-column: 1 / -1;
+}
+
+.btn-primary.payment-btn:hover {
+  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.4);
+}
+
 .btn-secondary {
   background: white;
   border: 2px solid #3b82f6;
   color: #3b82f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
 }
 
 .btn-secondary:hover {
   background: #eff6ff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
 }
 
 .btn-outline {
   background: white;
   border: 2px solid #e2e8f0;
   color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
 }
 
 .btn-outline:hover {
   border-color: #cbd5e1;
   background: #f8fafc;
+  transform: translateY(-2px);
 }
 
 /* ==================== IMPORTANT NOTES ==================== */
@@ -461,6 +750,97 @@
   left: 0;
   font-weight: 700;
   color: #f59e0b;
+}
+
+/* ==================== TICKET SECTION ==================== */
+
+.ticket-section {
+  background: white;
+  border-radius: 20px;
+  padding: 32px;
+  margin-top: 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.ticket-section h3 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0 0 24px 0;
+}
+
+.ticket-info {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ticket-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  border-bottom: 1px solid #f1f5f9;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.ticket-row:hover {
+  background: #f8fafc;
+}
+
+.ticket-row.highlight {
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border: 2px solid #3b82f6;
+  margin: 4px 0;
+}
+
+.ticket-row:last-child {
+  border-bottom: none;
+}
+
+.ticket-label {
+  font-weight: 600;
+  color: #64748b;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ticket-value {
+  font-family: 'Courier New', monospace;
+  font-size: 16px;
+  font-weight: 600;
+  color: #3b82f6;
+  letter-spacing: 1px;
+}
+
+/* ==================== BARCODE SECTION ==================== */
+
+.barcode-section {
+  background: white;
+  border-radius: 20px;
+  padding: 32px;
+  margin-top: 24px;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.barcode-section h3 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0 0 24px 0;
+}
+
+.barcode-note {
+  margin-top: 16px;
+  color: #64748b;
+  font-size: 14px;
+  font-style: italic;
 }
 
 /* ==================== QR CODE ==================== */

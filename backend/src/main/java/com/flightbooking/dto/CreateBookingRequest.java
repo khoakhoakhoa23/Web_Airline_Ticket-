@@ -15,5 +15,11 @@ public class CreateBookingRequest {
     private List<PassengerDTO> passengers;
     private String currency;
     private java.math.BigDecimal seatPrice; // Phí chọn ghế
+    
+    /**
+     * Seat selections - which seats are selected for which passengers
+     * Each entry maps a seat to a passenger by passengerIndex
+     */
+    private List<SeatSelectionInputDTO> seatSelections;
 }
 

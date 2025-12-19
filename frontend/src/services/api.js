@@ -293,6 +293,10 @@ export const seatSelectionService = {
     return api.get(`/seat-selections/segment/${segmentId}`);
   },
   
+  getSeatSelectionsByBookingId: (bookingId) => {
+    return api.get(`/seat-selections/booking/${bookingId}`);
+  },
+  
   getBookedSeatsByFlightNumber: (flightNumber) => {
     return api.get(`/seat-selections/flight/${flightNumber}`);
   },

@@ -1,6 +1,7 @@
 package com.flightbooking.service;
 
 import com.flightbooking.dto.DashboardStats;
+import com.flightbooking.entity.Booking;
 import com.flightbooking.repository.BookingRepository;
 import com.flightbooking.repository.FlightRepository;
 import com.flightbooking.repository.PaymentRepository;
@@ -14,6 +15,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.List;
 
 /**
  * Admin Service
@@ -86,14 +88,22 @@ public class AdminService {
     }
     
     /**
-     * Calculate total revenue from all successful payments
+     * Calculate total revenue from all confirmed bookings
+     * Uses booking.totalAmount to ensure accuracy and avoid double counting
+     * Only counts bookings with status CONFIRMED (which means payment was successful)
      */
     private BigDecimal calculateTotalRevenue() {
         try {
-            return paymentRepository.findByStatus("SUCCESS")
-                    .stream()
-                    .map(payment -> payment.getAmount() != null ? payment.getAmount() : BigDecimal.ZERO)
+            List<Booking> confirmedBookings = bookingRepository.findByStatus("CONFIRMED");
+            logger.debug("Found {} confirmed bookings for revenue calculation", confirmedBookings.size());
+            
+            BigDecimal total = confirmedBookings.stream()
+                    .filter(booking -> booking.getTotalAmount() != null)
+                    .map(Booking::getTotalAmount)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
+            
+            logger.info("Total revenue calculated: {} VND", total);
+            return total;
         } catch (Exception e) {
             logger.error("Error calculating total revenue", e);
             return BigDecimal.ZERO;
@@ -102,16 +112,53 @@ public class AdminService {
     
     /**
      * Calculate revenue between two dates
+     * Uses confirmed bookings that were confirmed (updatedAt) within the date range
+     * Only counts bookings with status CONFIRMED
+     * 
+     * Note: We use updatedAt to determine when booking was confirmed (after payment)
+     * This is more accurate than createdAt which is when booking was initially created
      */
     private BigDecimal calculateRevenueBetween(LocalDateTime start, LocalDateTime end) {
         try {
-            return paymentRepository.findByStatus("SUCCESS")
-                    .stream()
-                    .filter(payment -> payment.getCreatedAt() != null &&
-                            payment.getCreatedAt().isAfter(start) &&
-                            payment.getCreatedAt().isBefore(end))
-                    .map(payment -> payment.getAmount() != null ? payment.getAmount() : BigDecimal.ZERO)
+            // Get all confirmed bookings
+            List<Booking> confirmedBookings = bookingRepository.findByStatus("CONFIRMED");
+            
+            // Filter by date range - use updatedAt (when booking was confirmed) for accuracy
+            BigDecimal revenue = confirmedBookings.stream()
+                    .filter(booking -> {
+                        // Use updatedAt to determine when booking was confirmed
+                        // If updatedAt is null, fallback to createdAt
+                        LocalDateTime checkDate = booking.getUpdatedAt() != null 
+                            ? booking.getUpdatedAt() 
+                            : booking.getCreatedAt();
+                        
+                        if (checkDate == null) {
+                            return false;
+                        }
+                        
+                        // Check if booking was confirmed within the date range (inclusive)
+                        // Include bookings confirmed at start or end time
+                        return (checkDate.isEqual(start) || checkDate.isAfter(start)) 
+                            && (checkDate.isEqual(end) || checkDate.isBefore(end));
+                    })
+                    .filter(booking -> booking.getTotalAmount() != null)
+                    .map(Booking::getTotalAmount)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
+            
+            long count = confirmedBookings.stream()
+                    .filter(booking -> {
+                        LocalDateTime checkDate = booking.getUpdatedAt() != null 
+                            ? booking.getUpdatedAt() 
+                            : booking.getCreatedAt();
+                        return checkDate != null 
+                            && (checkDate.isEqual(start) || checkDate.isAfter(start)) 
+                            && (checkDate.isEqual(end) || checkDate.isBefore(end));
+                    })
+                    .count();
+            
+            logger.info("Revenue between {} and {}: {} VND (from {} confirmed bookings)", 
+                start, end, revenue, count);
+            return revenue;
         } catch (Exception e) {
             logger.error("Error calculating revenue between dates", e);
             return BigDecimal.ZERO;

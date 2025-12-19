@@ -13,6 +13,7 @@ import com.flightbooking.exception.UnauthorizedActionException;
 import com.flightbooking.repository.BookingRepository;
 import com.flightbooking.repository.FlightSegmentRepository;
 import com.flightbooking.repository.PassengerRepository;
+import com.flightbooking.repository.SeatSelectionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,6 +44,12 @@ public class BookingService {
     
     @Autowired
     private com.flightbooking.repository.UserRepository userRepository;
+    
+    @Autowired
+    private com.flightbooking.repository.TicketRepository ticketRepository;
+    
+    @Autowired
+    private com.flightbooking.repository.SeatSelectionRepository seatSelectionRepository;
     
     /**
      * Create new booking with validation
@@ -229,8 +236,8 @@ public class BookingService {
         
         booking.setTotalAmount(totalAmount);
         
-        // Set hold expiration (24 hours from now)
-        booking.setHoldExpiresAt(LocalDateTime.now().plusHours(24));
+        // Set hold expiration (15 minutes from now) - matches seat lock duration
+        booking.setHoldExpiresAt(LocalDateTime.now().plusMinutes(15));
         
         logger.debug("Saving booking to database. Booking ID: {}, User ID: {}, Total: {}", 
             booking.getId(), booking.getUserId(), booking.getTotalAmount());
@@ -306,12 +313,72 @@ public class BookingService {
             .collect(Collectors.toList());
         
         logger.debug("Saving {} passengers", passengers.size());
+        final List<Passenger> savedPassengers;
         try {
-            passengerRepository.saveAll(passengers);
+            savedPassengers = passengerRepository.saveAll(passengers);
             logger.debug("Passengers saved successfully");
         } catch (Exception e) {
             logger.error("Failed to save passengers: {}", e.getMessage(), e);
             throw new BusinessException("DATABASE_ERROR", "Failed to save passengers: " + e.getMessage());
+        }
+        
+        // ✅ Create seat selections if provided
+        logger.info("Checking seat selections - request.getSeatSelections(): {}, segments.isEmpty(): {}", 
+            request.getSeatSelections(), segments.isEmpty());
+        if (request.getSeatSelections() != null && !request.getSeatSelections().isEmpty() && !segments.isEmpty()) {
+            logger.info("Creating {} seat selections for booking {}", request.getSeatSelections().size(), bookingId);
+            logger.info("Seat selections data: {}", request.getSeatSelections());
+            
+            String segmentId = segments.get(0).getId(); // Use first segment
+            
+            List<com.flightbooking.entity.SeatSelection> seatSelections = request.getSeatSelections().stream()
+                .map(seatInput -> {
+                    // Validate passenger index
+                    if (seatInput.getPassengerIndex() == null || 
+                        seatInput.getPassengerIndex() < 0 || 
+                        seatInput.getPassengerIndex() >= savedPassengers.size()) {
+                        logger.warn("Invalid passenger index {} for seat {}. Skipping.", 
+                            seatInput.getPassengerIndex(), seatInput.getSeatNumber());
+                        return null;
+                    }
+                    
+                    Passenger passenger = savedPassengers.get(seatInput.getPassengerIndex());
+                    if (passenger == null || passenger.getId() == null) {
+                        logger.warn("Passenger at index {} not found. Skipping seat selection.", 
+                            seatInput.getPassengerIndex());
+                        return null;
+                    }
+                    
+                    com.flightbooking.entity.SeatSelection seatSelection = new com.flightbooking.entity.SeatSelection();
+                    seatSelection.setId(UUID.randomUUID().toString());
+                    seatSelection.setBookingId(bookingId);
+                    seatSelection.setPassengerId(passenger.getId());
+                    seatSelection.setSegmentId(segmentId);
+                    seatSelection.setSeatNumber(seatInput.getSeatNumber());
+                    seatSelection.setSeatType(seatInput.getSeatType() != null ? seatInput.getSeatType() : "STANDARD");
+                    seatSelection.setPrice(seatInput.getPrice() != null ? seatInput.getPrice() : BigDecimal.ZERO);
+                    seatSelection.setStatus("RESERVED"); // Default status when created
+                    
+                    logger.debug("Created seat selection: {} for passenger {} (index {})", 
+                        seatInput.getSeatNumber(), passenger.getFullName(), seatInput.getPassengerIndex());
+                    
+                    return seatSelection;
+                })
+                .filter(seatSelection -> seatSelection != null)
+                .collect(Collectors.toList());
+            
+            if (!seatSelections.isEmpty()) {
+                try {
+                    seatSelectionRepository.saveAll(seatSelections);
+                    logger.info("✅ Created {} seat selections for booking {}", seatSelections.size(), bookingId);
+                } catch (Exception e) {
+                    logger.error("Failed to save seat selections: {}", e.getMessage(), e);
+                    // Don't fail booking creation if seat selection fails
+                    // But log the error for debugging
+                }
+            }
+        } else {
+            logger.info("No seat selections provided for booking {}", bookingId);
         }
         
         logger.info("Booking created successfully: {} (code: {})", booking.getId(), booking.getBookingCode());
@@ -431,21 +498,32 @@ public class BookingService {
      * Get booking by ID with ownership check
      * 
      * @param id Booking ID
-     * @param currentUserEmail Current authenticated user email (null for admin)
+     * @param currentUserId Current authenticated user ID (from JWT token)
+     * @param currentUserEmail Current authenticated user email (for admin check, optional)
      * @return BookingDTO
      * @throws ResourceNotFoundException if booking not found
      * @throws UnauthorizedActionException if user doesn't own the booking
      */
     @Transactional(readOnly = true)
-    public BookingDTO getBookingById(String id, String currentUserEmail) {
+    public BookingDTO getBookingById(String id, String currentUserId, String currentUserEmail) {
         Booking booking = bookingRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Booking not found with ID: " + id));
         
-        // Check ownership (admin can view any booking)
-        if (currentUserEmail != null && !isOwner(booking, currentUserEmail) && !isAdmin(currentUserEmail)) {
+        logger.debug("Checking ownership - Booking userId: {}, Current userId: {}, Current email: {}", 
+            booking.getUserId(), currentUserId, currentUserEmail);
+        
+        // Check ownership: Compare userId directly (more reliable than email)
+        // Admin can view any booking (checked by email if provided)
+        boolean isOwner = currentUserId != null && currentUserId.equals(booking.getUserId());
+        boolean isAdmin = currentUserEmail != null && isAdminByEmail(currentUserEmail);
+        
+        if (currentUserId != null && !isOwner && !isAdmin) {
+            logger.warn("Access denied - User {} tried to access booking {} (owner: {})", 
+                currentUserId, id, booking.getUserId());
             throw new UnauthorizedActionException("You do not have permission to view this booking");
         }
         
+        logger.debug("Access granted - isOwner: {}, isAdmin: {}", isOwner, isAdmin);
         return convertToDTO(booking);
     }
     
@@ -453,18 +531,22 @@ public class BookingService {
      * Get booking by code with ownership check
      * 
      * @param bookingCode Booking code
-     * @param currentUserEmail Current authenticated user email (null for admin)
+     * @param currentUserId Current authenticated user ID (from JWT token)
+     * @param currentUserEmail Current authenticated user email (for admin check, optional)
      * @return BookingDTO
      * @throws ResourceNotFoundException if booking not found
      * @throws UnauthorizedActionException if user doesn't own the booking
      */
     @Transactional(readOnly = true)
-    public BookingDTO getBookingByCode(String bookingCode, String currentUserEmail) {
+    public BookingDTO getBookingByCode(String bookingCode, String currentUserId, String currentUserEmail) {
         Booking booking = bookingRepository.findByBookingCode(bookingCode)
             .orElseThrow(() -> new ResourceNotFoundException("Booking not found with code: " + bookingCode));
         
-        // Check ownership (admin can view any booking)
-        if (currentUserEmail != null && !isOwner(booking, currentUserEmail) && !isAdmin(currentUserEmail)) {
+        // Check ownership: Compare userId directly
+        boolean isOwner = currentUserId != null && currentUserId.equals(booking.getUserId());
+        boolean isAdmin = currentUserEmail != null && isAdminByEmail(currentUserEmail);
+        
+        if (currentUserId != null && !isOwner && !isAdmin) {
             throw new UnauthorizedActionException("You do not have permission to view this booking");
         }
         
@@ -475,14 +557,18 @@ public class BookingService {
      * Get all bookings for a user with ownership check
      * 
      * @param userId User ID
-     * @param currentUserEmail Current authenticated user email
+     * @param currentUserId Current authenticated user ID (from JWT token)
+     * @param currentUserEmail Current authenticated user email (for admin check, optional)
      * @return List of BookingDTO
      * @throws UnauthorizedActionException if user tries to view other user's bookings
      */
     @Transactional(readOnly = true)
-    public List<BookingDTO> getBookingsByUserId(String userId, String currentUserEmail) {
+    public List<BookingDTO> getBookingsByUserId(String userId, String currentUserId, String currentUserEmail) {
         // Check ownership: user can only view their own bookings (unless admin)
-        if (currentUserEmail != null && !isUserIdMatchEmail(userId, currentUserEmail) && !isAdmin(currentUserEmail)) {
+        boolean isOwner = currentUserId != null && currentUserId.equals(userId);
+        boolean isAdmin = currentUserEmail != null && isAdminByEmail(currentUserEmail);
+        
+        if (currentUserId != null && !isOwner && !isAdmin) {
             throw new UnauthorizedActionException("You do not have permission to view these bookings");
         }
         
@@ -496,19 +582,23 @@ public class BookingService {
      * 
      * @param id Booking ID
      * @param status New status
-     * @param currentUserEmail Current authenticated user email
+     * @param currentUserId Current authenticated user ID (from JWT token)
+     * @param currentUserEmail Current authenticated user email (for admin check, optional)
      * @return Updated BookingDTO
      * @throws ResourceNotFoundException if booking not found
      * @throws UnauthorizedActionException if user doesn't own the booking
      * @throws BusinessException if status transition is invalid
      */
     @Transactional
-    public BookingDTO updateBookingStatus(String id, String status, String currentUserEmail) {
+    public BookingDTO updateBookingStatus(String id, String status, String currentUserId, String currentUserEmail) {
         Booking booking = bookingRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Booking not found with ID: " + id));
         
-        // Check ownership (admin can update any booking)
-        if (currentUserEmail != null && !isOwner(booking, currentUserEmail) && !isAdmin(currentUserEmail)) {
+        // Check ownership: Compare userId directly
+        boolean isOwner = currentUserId != null && currentUserId.equals(booking.getUserId());
+        boolean isAdmin = currentUserEmail != null && isAdminByEmail(currentUserEmail);
+        
+        if (currentUserId != null && !isOwner && !isAdmin) {
             throw new UnauthorizedActionException("You do not have permission to update this booking");
         }
         
@@ -524,18 +614,22 @@ public class BookingService {
      * Cancel booking with ownership check and business rules
      * 
      * @param id Booking ID
-     * @param currentUserEmail Current authenticated user email
+     * @param currentUserId Current authenticated user ID (from JWT token)
+     * @param currentUserEmail Current authenticated user email (for admin check, optional)
      * @throws ResourceNotFoundException if booking not found
      * @throws UnauthorizedActionException if user doesn't own the booking
      * @throws BusinessException if booking cannot be cancelled
      */
     @Transactional
-    public void cancelBooking(String id, String currentUserEmail) {
+    public void cancelBooking(String id, String currentUserId, String currentUserEmail) {
         Booking booking = bookingRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Booking not found with ID: " + id));
         
-        // Check ownership (admin can cancel any booking)
-        if (currentUserEmail != null && !isOwner(booking, currentUserEmail) && !isAdmin(currentUserEmail)) {
+        // Check ownership: Compare userId directly
+        boolean isOwner = currentUserId != null && currentUserId.equals(booking.getUserId());
+        boolean isAdmin = currentUserEmail != null && isAdminByEmail(currentUserEmail);
+        
+        if (currentUserId != null && !isOwner && !isAdmin) {
             throw new UnauthorizedActionException("You do not have permission to cancel this booking");
         }
         
@@ -564,31 +658,28 @@ public class BookingService {
     /**
      * Check if user owns the booking
      */
-    private boolean isOwner(Booking booking, String userEmail) {
-        if (booking.getUser() != null) {
-            return booking.getUser().getEmail().equals(userEmail);
+    /**
+     * Check if current user is the owner of the booking
+     * Compares userId directly (more reliable than email)
+     */
+    private boolean isOwner(Booking booking, String userId) {
+        if (userId == null || booking.getUserId() == null) {
+            return false;
         }
-        // If user not loaded, check by userId
-        // This requires loading user from database
-        return false;
+        return booking.getUserId().equals(userId);
     }
     
     /**
-     * Check if user ID matches email
-     * This is a placeholder - in production, verify via UserService
+     * Check if user is admin by email
+     * In production, check via UserService or SecurityContext roles
      */
-    private boolean isUserIdMatchEmail(String userId, String email) {
-        // TODO: Implement proper check via UserService
-        return true; // For now, assume valid
-    }
-    
-    /**
-     * Check if user is admin
-     * This is a placeholder - in production, check via SecurityContext
-     */
-    private boolean isAdmin(String email) {
+    private boolean isAdminByEmail(String email) {
+        if (email == null) {
+            return false;
+        }
         // TODO: Implement proper admin check via UserService
-        return false; // For now, assume not admin
+        // For now, check if email contains "admin" (temporary solution)
+        return email.toLowerCase().contains("admin");
     }
     
     /**
@@ -689,6 +780,22 @@ public class BookingService {
         }
         
         if (booking.getPassengers() != null) {
+            // Load seat selections for this booking to map with passengers
+            List<com.flightbooking.entity.SeatSelection> seatSelections = 
+                seatSelectionRepository.findByBookingId(booking.getId());
+            
+            // Create a map: passengerId -> seatNumber
+            java.util.Map<String, String> seatMap = seatSelections.stream()
+                .filter(ss -> ss.getPassengerId() != null && ss.getSeatNumber() != null)
+                .collect(Collectors.toMap(
+                    com.flightbooking.entity.SeatSelection::getPassengerId,
+                    com.flightbooking.entity.SeatSelection::getSeatNumber,
+                    (existing, replacement) -> existing // Keep first if duplicate
+                ));
+            
+            logger.debug("Booking {} - Found {} seat selections, mapped to {} passengers", 
+                booking.getId(), seatSelections.size(), seatMap.size());
+            
             dto.setPassengers(booking.getPassengers().stream()
                 .map(passenger -> {
                     PassengerDTO passengerDTO = new PassengerDTO();
@@ -699,6 +806,8 @@ public class BookingService {
                     passengerDTO.setDocumentType(passenger.getDocumentType());
                     passengerDTO.setDocumentNumber(passenger.getDocumentNumber());
                     passengerDTO.setBookingId(passenger.getBookingId());
+                    // Map seat number from seat selections
+                    passengerDTO.setSeatNumber(seatMap.get(passenger.getId()));
                     return passengerDTO;
                 })
                 .collect(Collectors.toList()));
@@ -779,6 +888,14 @@ public class BookingService {
             booking = bookingRepository.save(booking);
             logger.info("✅ Booking {} approved successfully. Status changed from {} to CONFIRMED", 
                 id, currentStatus);
+            
+            // Create ticket for approved booking
+            try {
+                createTicketForBooking(booking);
+            } catch (Exception e) {
+                logger.error("Failed to create ticket for booking {}: {}", id, e.getMessage());
+                // Don't fail the approval if ticket creation fails
+            }
         } else {
             throw new BusinessException("INVALID_STATUS_FOR_APPROVAL", 
                 "Cannot approve booking with status: " + currentStatus + ". Only PENDING or PENDING_PAYMENT can be approved.");
@@ -803,6 +920,59 @@ public class BookingService {
         booking.setStatus("CANCELLED");
         booking.setUpdatedAt(LocalDateTime.now());
         bookingRepository.save(booking);
+    }
+    
+    /**
+     * Create ticket for approved booking
+     * Generates PNR and e-ticket number
+     */
+    private void createTicketForBooking(Booking booking) {
+        logger.info("Creating ticket for booking: {}", booking.getId());
+        
+        // Check if ticket already exists
+        List<com.flightbooking.entity.Ticket> existingTickets = ticketRepository.findByBookingId(booking.getId());
+        if (!existingTickets.isEmpty()) {
+            logger.info("Ticket already exists for booking: {}", booking.getId());
+            return;
+        }
+        
+        // Create ticket
+        com.flightbooking.entity.Ticket ticket = new com.flightbooking.entity.Ticket();
+        ticket.setId(UUID.randomUUID().toString());
+        ticket.setBookingId(booking.getId());
+        ticket.setPnr(generatePNR());
+        ticket.setEticketNumber(generateETicketNumber());
+        ticket.setStatus("ISSUED");
+        ticket.setIssuedAt(LocalDateTime.now());
+        
+        ticketRepository.save(ticket);
+        logger.info("Ticket created for booking: {} - PNR: {}, E-Ticket: {}", 
+            booking.getId(), ticket.getPnr(), ticket.getEticketNumber());
+    }
+    
+    /**
+     * Generate PNR (Passenger Name Record) - 6 alphanumeric characters
+     */
+    private String generatePNR() {
+        String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        StringBuilder pnr = new StringBuilder();
+        java.util.Random random = new java.util.Random();
+        for (int i = 0; i < 6; i++) {
+            pnr.append(chars.charAt(random.nextInt(chars.length())));
+        }
+        return pnr.toString();
+    }
+    
+    /**
+     * Generate E-Ticket number - 13 digits
+     */
+    private String generateETicketNumber() {
+        StringBuilder eticket = new StringBuilder();
+        java.util.Random random = new java.util.Random();
+        for (int i = 0; i < 13; i++) {
+            eticket.append(random.nextInt(10));
+        }
+        return eticket.toString();
     }
 }
 

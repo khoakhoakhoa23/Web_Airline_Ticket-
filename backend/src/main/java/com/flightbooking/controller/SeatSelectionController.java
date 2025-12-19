@@ -47,6 +47,14 @@ public class SeatSelectionController {
         return ResponseEntity.ok(seatSelections);
     }
     
+    @GetMapping("/booking/{bookingId}")
+    public ResponseEntity<List<SeatSelectionDTO>> getSeatSelectionsByBookingId(
+            @PathVariable String bookingId) {
+        List<SeatSelectionDTO> seatSelections = 
+            seatSelectionService.getSeatSelectionsByBookingId(bookingId);
+        return ResponseEntity.ok(seatSelections);
+    }
+    
     /**
      * Get booked seats for a flight with customer information
      * GET /api/seat-selections/flight/{flightNumber}

@@ -20,6 +20,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -49,6 +50,9 @@ public class AdminController {
     
     @Autowired
     private FlightService flightService;
+    
+    @Autowired
+    private com.flightbooking.repository.NotificationRepository notificationRepository;
     
     /**
      * Get dashboard statistics
@@ -84,6 +88,31 @@ public class AdminController {
         }
         
         return ResponseEntity.ok(bookings);
+    }
+    
+    /**
+     * Get pending approval notifications
+     * GET /api/admin/notifications/pending
+     */
+    @GetMapping("/notifications/pending")
+    public ResponseEntity<List<com.flightbooking.entity.Notification>> getPendingNotifications() {
+        logger.info("Admin: Fetching pending notifications");
+        
+        // Get all notifications for bookings with PENDING_PAYMENT status
+        List<com.flightbooking.entity.Notification> notifications = 
+            notificationRepository.findAll().stream()
+                .filter(n -> {
+                    try {
+                        BookingDTO booking = bookingService.getAdminBookingById(n.getBookingId());
+                        return "PENDING_PAYMENT".equals(booking.getStatus());
+                    } catch (Exception e) {
+                        return false;
+                    }
+                })
+                .sorted((a, b) -> b.getSentAt().compareTo(a.getSentAt()))
+                .collect(java.util.stream.Collectors.toList());
+        
+        return ResponseEntity.ok(notifications);
     }
     
     /**

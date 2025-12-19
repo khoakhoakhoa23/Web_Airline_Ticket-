@@ -209,28 +209,6 @@ const Home = () => {
           </div>
         </div>
       </div>
-
-      <div className="info-sections">
-        <div className="info-card">
-          <h3>Flexible Booking</h3>
-          <p>
-            Many airlines are relaxing their rules on ticket changes. They are saying it's OK if you are not totally sure; book now, and know that you can change your mind later.
-          </p>
-          <a href="#read-more" className="read-more">Read More</a>
-        </div>
-        <div className="info-card">
-          <h3>Covid-19 Information</h3>
-          <p>
-            You can find some of the special requirements for any destination via the link below or directly on your airline's website. Please also consult your local health authorities for updated information.
-          </p>
-          <a href="#read-more" className="read-more">Read More</a>
-        </div>
-        <div className="info-card">
-          <h3>Refunds</h3>
-          <p>How does the refund process work?</p>
-          <a href="#read-more" className="read-more">Read More</a>
-        </div>
-      </div>
     </div>
   );
 };

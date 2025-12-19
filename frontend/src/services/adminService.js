@@ -39,6 +39,13 @@ export const cancelBooking = async (id) => {
   return response.data;
 };
 
+// ==================== NOTIFICATIONS ====================
+
+export const getPendingNotifications = async () => {
+  const response = await api.get('/admin/notifications/pending');
+  return response.data;
+};
+
 // ==================== USERS ====================
 
 export const getAllUsers = async (page = 0, size = 20) => {

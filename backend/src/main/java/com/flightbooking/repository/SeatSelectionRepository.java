@@ -10,5 +10,11 @@ import java.util.List;
 public interface SeatSelectionRepository extends JpaRepository<SeatSelection, String> {
     List<SeatSelection> findByPassengerId(String passengerId);
     List<SeatSelection> findBySegmentId(String segmentId);
+    List<SeatSelection> findByBookingId(String bookingId);
+    
+    /**
+     * Check if seat is booked (confirmed) for a segment
+     */
+    boolean existsBySegmentIdAndSeatNumberAndStatus(String segmentId, String seatNumber, String status);
 }
 

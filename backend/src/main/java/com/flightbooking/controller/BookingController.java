@@ -153,11 +153,33 @@ public class BookingController {
         logger.info("Fetching booking by ID: {}", id);
         
         // Get current authenticated user
+        // auth.getName() returns userId (set by JwtAuthenticationFilter as principal)
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        String currentUserEmail = auth != null ? auth.getName() : null;
+        String currentUserId = auth != null && auth.isAuthenticated() ? auth.getName() : null;
+        
+        // Try to get email from JWT token for admin check
+        String currentUserEmail = null;
+        try {
+            if (auth != null && auth.isAuthenticated()) {
+                ServletRequestAttributes attributes = 
+                    (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                if (attributes != null) {
+                    jakarta.servlet.http.HttpServletRequest httpRequest = attributes.getRequest();
+                    String authHeader = httpRequest.getHeader("Authorization");
+                    if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                        String token = authHeader.substring(7);
+                        currentUserEmail = jwtUtil.extractEmail(token);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to extract email from token: {}", e.getMessage());
+        }
+        
+        logger.info("Current user ID: {}, Email: {}", currentUserId, currentUserEmail);
         
         // Service will check ownership and throw exception if unauthorized
-        BookingDTO booking = bookingService.getBookingById(id, currentUserEmail);
+        BookingDTO booking = bookingService.getBookingById(id, currentUserId, currentUserEmail);
         
         logger.info("Booking retrieved: {}", id);
         return ResponseEntity.ok(booking);
@@ -177,11 +199,31 @@ public class BookingController {
         logger.info("Fetching booking by code: {}", bookingCode);
         
         // Get current authenticated user
+        // auth.getName() returns userId (set by JwtAuthenticationFilter as principal)
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        String currentUserEmail = auth != null ? auth.getName() : null;
+        String currentUserId = auth != null && auth.isAuthenticated() ? auth.getName() : null;
+        
+        // Try to get email from JWT token for admin check
+        String currentUserEmail = null;
+        try {
+            if (auth != null && auth.isAuthenticated()) {
+                ServletRequestAttributes attributes = 
+                    (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                if (attributes != null) {
+                    jakarta.servlet.http.HttpServletRequest httpRequest = attributes.getRequest();
+                    String authHeader = httpRequest.getHeader("Authorization");
+                    if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                        String token = authHeader.substring(7);
+                        currentUserEmail = jwtUtil.extractEmail(token);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to extract email from token: {}", e.getMessage());
+        }
         
         // Service will check ownership and throw exception if unauthorized
-        BookingDTO booking = bookingService.getBookingByCode(bookingCode, currentUserEmail);
+        BookingDTO booking = bookingService.getBookingByCode(bookingCode, currentUserId, currentUserEmail);
         
         logger.info("Booking retrieved by code: {}", bookingCode);
         return ResponseEntity.ok(booking);
@@ -201,11 +243,31 @@ public class BookingController {
         logger.info("Fetching bookings for user: {}", userId);
         
         // Get current authenticated user
+        // auth.getName() returns userId (set by JwtAuthenticationFilter as principal)
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        String currentUserEmail = auth != null ? auth.getName() : null;
+        String currentUserId = auth != null && auth.isAuthenticated() ? auth.getName() : null;
+        
+        // Try to get email from JWT token for admin check
+        String currentUserEmail = null;
+        try {
+            if (auth != null && auth.isAuthenticated()) {
+                ServletRequestAttributes attributes = 
+                    (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                if (attributes != null) {
+                    jakarta.servlet.http.HttpServletRequest httpRequest = attributes.getRequest();
+                    String authHeader = httpRequest.getHeader("Authorization");
+                    if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                        String token = authHeader.substring(7);
+                        currentUserEmail = jwtUtil.extractEmail(token);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to extract email from token: {}", e.getMessage());
+        }
         
         // Service will check ownership and throw exception if unauthorized
-        List<BookingDTO> bookings = bookingService.getBookingsByUserId(userId, currentUserEmail);
+        List<BookingDTO> bookings = bookingService.getBookingsByUserId(userId, currentUserId, currentUserEmail);
         
         logger.info("Found {} bookings for user: {}", bookings.size(), userId);
         return ResponseEntity.ok(bookings);
@@ -230,10 +292,29 @@ public class BookingController {
         
         // Get current authenticated user
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        String currentUserEmail = auth != null ? auth.getName() : null;
+        String currentUserId = auth != null && auth.isAuthenticated() ? auth.getName() : null;
+        
+        // Try to get email from JWT token for admin check
+        String currentUserEmail = null;
+        try {
+            if (auth != null && auth.isAuthenticated()) {
+                ServletRequestAttributes attributes = 
+                    (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                if (attributes != null) {
+                    jakarta.servlet.http.HttpServletRequest httpRequest = attributes.getRequest();
+                    String authHeader = httpRequest.getHeader("Authorization");
+                    if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                        String token = authHeader.substring(7);
+                        currentUserEmail = jwtUtil.extractEmail(token);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to extract email from token: {}", e.getMessage());
+        }
         
         // Service will validate status transition and check ownership
-        BookingDTO booking = bookingService.updateBookingStatus(id, request.getStatus(), currentUserEmail);
+        BookingDTO booking = bookingService.updateBookingStatus(id, request.getStatus(), currentUserId, currentUserEmail);
         
         logger.info("Booking {} status updated to: {}", id, request.getStatus());
         return ResponseEntity.ok(booking);
@@ -255,10 +336,29 @@ public class BookingController {
         
         // Get current authenticated user
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        String currentUserEmail = auth != null ? auth.getName() : null;
+        String currentUserId = auth != null && auth.isAuthenticated() ? auth.getName() : null;
+        
+        // Try to get email from JWT token for admin check
+        String currentUserEmail = null;
+        try {
+            if (auth != null && auth.isAuthenticated()) {
+                ServletRequestAttributes attributes = 
+                    (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                if (attributes != null) {
+                    jakarta.servlet.http.HttpServletRequest httpRequest = attributes.getRequest();
+                    String authHeader = httpRequest.getHeader("Authorization");
+                    if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                        String token = authHeader.substring(7);
+                        currentUserEmail = jwtUtil.extractEmail(token);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to extract email from token: {}", e.getMessage());
+        }
         
         // Service will check ownership and business rules
-        bookingService.cancelBooking(id, currentUserEmail);
+        bookingService.cancelBooking(id, currentUserId, currentUserEmail);
         
         logger.info("Booking cancelled: {}", id);
         return ResponseEntity.noContent().build();

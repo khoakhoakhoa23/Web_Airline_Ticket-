@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { bookingService, seatSelectionService } from '../services/api';
+import { bookingService, seatSelectionService, ticketService } from '../services/api';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import Barcode from '../components/Barcode';
 import '../styles/pages/MyBookings.css';
 
 /**
@@ -20,6 +21,7 @@ const MyBookings = () => {
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('ALL'); // ALL, PENDING, CONFIRMED, CANCELLED
   const [seatSelections, setSeatSelections] = useState({}); // Map passengerId -> seatNumber
+  const [tickets, setTickets] = useState({}); // Map bookingId -> ticket
 
   useEffect(() => {
     const fetchBookings = async () => {
@@ -45,26 +47,48 @@ const MyBookings = () => {
         
         setBookings(bookingsData);
         
-        // Fetch seat selections for all passengers
+        // Fetch seat selections for all bookings by booking ID (simpler and more reliable)
         const seatMap = {};
         for (const booking of bookingsData) {
-          if (booking.passengers && booking.passengers.length > 0) {
-            for (const passenger of booking.passengers) {
-              if (passenger.id) {
-                try {
-                  const seatResponse = await seatSelectionService.getSeatSelectionsByPassengerId(passenger.id);
-                  const seats = seatResponse.data || [];
-                  if (seats.length > 0) {
-                    seatMap[passenger.id] = seats[0].seatNumber; // Get first seat (usually one per passenger)
-                  }
-                } catch (err) {
-                  console.error(`Failed to load seat for passenger ${passenger.id}:`, err);
+          if (booking.id) {
+            try {
+              const seatsResponse = await seatSelectionService.getSeatSelectionsByBookingId(booking.id);
+              const seats = seatsResponse.data || [];
+              console.log(`[MyBookings] Booking ${booking.id} - Found ${seats.length} seat selections:`, seats);
+              // Map seats to passengers
+              for (const seat of seats) {
+                if (seat.passengerId && seat.seatNumber) {
+                  seatMap[seat.passengerId] = seat.seatNumber;
+                  console.log(`[MyBookings] Mapped seat ${seat.seatNumber} to passenger ${seat.passengerId}`);
                 }
               }
+            } catch (err) {
+              // Log error for debugging
+              console.error(`[MyBookings] Error fetching seats for booking ${booking.id}:`, err);
+              console.log(`No seats found for booking ${booking.id}`);
             }
           }
         }
+        console.log(`[MyBookings] Final seatMap:`, seatMap);
+        console.log(`[MyBookings] Passengers in bookings:`, bookingsData.map(b => b.passengers?.map(p => ({ id: p.id, name: p.fullName }))));
         setSeatSelections(seatMap);
+        
+        // Fetch tickets for confirmed bookings
+        const ticketMap = {};
+        for (const booking of bookingsData) {
+          if (booking.status === 'CONFIRMED' && booking.id) {
+            try {
+              const ticketResponse = await ticketService.getTicketsByBookingId(booking.id);
+              if (ticketResponse.data) {
+                ticketMap[booking.id] = ticketResponse.data;
+              }
+            } catch (err) {
+              // Ticket might not exist yet, ignore error
+              console.log(`No ticket found for booking ${booking.id}`);
+            }
+          }
+        }
+        setTickets(ticketMap);
       } catch (err) {
         console.error('Error fetching bookings:', err);
         setError(err.response?.data?.message || 'Failed to load bookings');
@@ -215,16 +239,28 @@ const MyBookings = () => {
           <div className="bookings-list">
             {filteredBookings.map((booking) => {
               const flightSegment = booking.flightSegments?.[0];
+              const ticket = tickets[booking.id];
+              const passengerNames = booking.passengers?.map(p => p.fullName).join(', ') || '';
+              
+              const isCancelled = booking.status === 'CANCELLED' || booking.status === 'EXPIRED';
+              const isPending = booking.status === 'PENDING' || booking.status === 'PENDING_PAYMENT';
+              const isConfirmed = booking.status === 'CONFIRMED';
               
               return (
-                <div key={booking.id} className="booking-card">
+                <div key={booking.id} className={`booking-card ${isCancelled ? 'booking-cancelled' : ''}`}>
                   <div className="booking-header">
                     <div className="booking-code-section">
-                      <span className="label">Booking Reference</span>
-                      <span className="booking-code">{booking.bookingCode}</span>
+                      <span className="label">
+                        <span className="icon">📋</span>
+                        Booking Reference
+                      </span>
+                      <span className="booking-code">{booking.bookingCode || 'N/A'}</span>
                     </div>
                     <span className={`status-badge ${getStatusClass(booking.status)}`}>
-                      {booking.status}
+                      {isConfirmed && <span className="icon">✅</span>}
+                      {isPending && <span className="icon">⏳</span>}
+                      {isCancelled && <span className="icon">❌</span>}
+                      <span>{booking.status}</span>
                     </span>
                   </div>
 
@@ -233,81 +269,161 @@ const MyBookings = () => {
                     <div className="flight-info">
                       <div className="flight-route">
                         <div className="airport">
-                          <span className="code">{flightSegment.origin}</span>
+                          <span className="code">{flightSegment.origin || 'N/A'}</span>
+                          <span className="airport-label">
+                            <span className="icon">📍</span>
+                            Điểm đi
+                          </span>
                         </div>
-                        <div className="flight-arrow">✈️</div>
+                        <div className="flight-arrow">
+                          <span className="icon">✈️</span>
+                        </div>
                         <div className="airport">
-                          <span className="code">{flightSegment.destination}</span>
+                          <span className="code">{flightSegment.destination || 'N/A'}</span>
+                          <span className="airport-label">
+                            <span className="icon">📍</span>
+                            Điểm đến
+                          </span>
                         </div>
                       </div>
                       <div className="flight-meta">
-                        <span>{flightSegment.airline} {flightSegment.flightNumber}</span>
-                        <span>•</span>
-                        <span>{flightSegment.cabinClass}</span>
-                        <span>•</span>
-                        <span>{formatDate(flightSegment.departTime)}</span>
+                        <span className="meta-item">
+                          <span className="icon">✈️</span>
+                          <strong>{flightSegment.airline || 'N/A'} {flightSegment.flightNumber || 'N/A'}</strong>
+                        </span>
+                        <span className="meta-item">
+                          <span className="icon">🪑</span>
+                          {flightSegment.cabinClass || 'N/A'}
+                        </span>
+                        <span className="meta-item">
+                          <span className="icon">🕐</span>
+                          {formatDate(flightSegment.departTime)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Passenger Names */}
+                  {passengerNames && !isCancelled && (
+                    <div className="passenger-names-section">
+                      <span className="label">
+                        <span className="icon">👥</span>
+                        Hành khách:
+                      </span>
+                      <span className="value">{passengerNames}</span>
+                    </div>
+                  )}
+
+                  {/* Seat Information - Only show for PENDING and CONFIRMED */}
+                  {booking.passengers && booking.passengers.length > 0 && 
+                   booking.status !== 'CANCELLED' && booking.status !== 'EXPIRED' && (
+                    <div className="seats-section">
+                      <h4 className="seats-section-title">
+                        <span className="icon">💺</span>
+                        Thông tin ghế ngồi
+                      </h4>
+                      <div className="seats-list-detailed">
+                        {booking.passengers.map((passenger, idx) => {
+                          // Use seatNumber from passenger DTO (populated by backend) or fallback to seatSelections map
+                          const seatNumber = passenger.seatNumber || seatSelections[passenger.id];
+                          const isPending = booking.status === 'PENDING' || booking.status === 'PENDING_PAYMENT';
+                          const isConfirmed = booking.status === 'CONFIRMED';
+                          
+                          return (
+                            <div key={idx} className="seat-passenger-item">
+                              <div className="passenger-seat-info">
+                                <div className="passenger-info-group">
+                                  <span className="icon">👤</span>
+                                  <span className="passenger-seat-name">{passenger.fullName}</span>
+                                </div>
+                                {seatNumber ? (
+                                  <div className="seat-display-group">
+                                    <span className="icon">🪑</span>
+                                    <span className="seat-badge-large">{seatNumber}</span>
+                                  </div>
+                                ) : isPending ? (
+                                  <div className="seat-pending-message">
+                                    <span className="icon">⏳</span>
+                                    <span className="pending-text">Ghế đã chọn – sẽ xác nhận sau thanh toán</span>
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
 
                   {/* Booking Details */}
                   <div className="booking-details">
-                    <div className="detail-row">
-                      <span className="label">Passengers:</span>
-                      <span className="value">{booking.passengers?.length || 0}</span>
-                    </div>
-                    {booking.passengers && booking.passengers.length > 0 && (
-                      <div className="detail-row">
-                        <span className="label">Ghế đã đặt:</span>
-                        <span className="value">
-                          {(() => {
-                            const seats = booking.passengers
-                              .map(passenger => seatSelections[passenger.id])
-                              .filter(Boolean);
-                            return seats.length > 0 ? (
-                              <span className="seats-list">
-                                {seats.map((seat, idx) => (
-                                  <span key={idx} className="seat-badge">
-                                    {seat}
-                                  </span>
-                                ))}
-                              </span>
-                            ) : (
-                              <span className="no-seat">Chưa chọn ghế</span>
-                            );
-                          })()}
-                        </span>
-                      </div>
+                    {ticket && isConfirmed && (
+                      <>
+                        <div className="detail-row highlight">
+                          <span className="label">
+                            <span className="icon">🎫</span>
+                            PNR:
+                          </span>
+                          <span className="value ticket-code">{ticket.pnr || 'N/A'}</span>
+                        </div>
+                        <div className="detail-row highlight">
+                          <span className="label">
+                            <span className="icon">🎫</span>
+                            E-Ticket Number:
+                          </span>
+                          <span className="value ticket-code">{ticket.eticketNumber || 'N/A'}</span>
+                        </div>
+                      </>
                     )}
-                    <div className="detail-row">
-                      <span className="label">Total Amount:</span>
+                    <div className="detail-row highlight-amount">
+                      <span className="label">
+                        <span className="icon">💰</span>
+                        Total Amount:
+                      </span>
                       <span className="value amount">
-                        {formatPrice(booking.totalAmount)} {booking.currency}
+                        {formatPrice(booking.totalAmount || 0)} {booking.currency || 'VND'}
                       </span>
                     </div>
                     <div className="detail-row">
-                      <span className="label">Created:</span>
+                      <span className="label">
+                        <span className="icon">📅</span>
+                        Created:
+                      </span>
                       <span className="value">{formatDate(booking.createdAt)}</span>
                     </div>
-                    {booking.holdExpiresAt && booking.status === 'PENDING' && (
+                    {booking.holdExpiresAt && isPending && (
                       <div className="detail-row warning">
-                        <span className="label">Expires:</span>
-                        <span className="value">{formatDate(booking.holdExpiresAt)}</span>
+                        <span className="label">
+                          <span className="icon">⏰</span>
+                          Expires:
+                        </span>
+                        <span className="value expires-warning">{formatDate(booking.holdExpiresAt)}</span>
                       </div>
                     )}
                   </div>
 
-                  {/* Actions */}
-                  <div className="booking-actions">
-                    <Link to={`/booking/confirmation/${booking.id}`} className="button primary">
-                      View Details
-                    </Link>
-                    {(booking.status === 'PENDING' || booking.status === 'PENDING_PAYMENT') && (
-                      <Link to={`/booking/payment?booking_id=${booking.id}`} className="button secondary">
-                        Complete Payment
+                  {/* Barcode for confirmed bookings */}
+                  {booking.status === 'CONFIRMED' && ticket && (
+                    <div className="barcode-section">
+                      <Barcode value={ticket.eticketNumber || booking.bookingCode} format="simple" />
+                    </div>
+                  )}
+
+                  {/* Actions - Hide for cancelled bookings */}
+                  {!isCancelled && (
+                    <div className="booking-actions">
+                      <Link to={`/booking/confirmation/${booking.id}`} className="button primary">
+                        <span className="icon">👁️</span>
+                        View Details
                       </Link>
-                    )}
-                  </div>
+                      {isPending && (
+                        <Link to={`/booking/payment?booking_id=${booking.id}`} className="button secondary payment-button">
+                          <span className="icon">💳</span>
+                          Complete Payment
+                        </Link>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}

@@ -41,6 +41,9 @@ public class NotificationService {
     @Autowired
     private UserRepository userRepository;
     
+    @Autowired
+    private com.flightbooking.repository.NotificationRepository notificationRepository;
+    
     /**
      * Send booking confirmation email
      * Triggered when booking is confirmed (after payment success)
@@ -197,6 +200,40 @@ public class NotificationService {
             logger.error("Failed to send booking reminder email for booking: {}, error: {}", 
                     bookingId, e.getMessage(), e);
             // Don't throw exception
+        }
+    }
+    
+    /**
+     * Create notification for admin to approve booking
+     * Called when payment is successful and booking needs admin approval
+     * 
+     * @param bookingId Booking ID
+     */
+    public void createAdminApprovalNotification(String bookingId) {
+        try {
+            logger.info("Creating admin approval notification for booking: {}", bookingId);
+            
+            // Fetch booking
+            Booking booking = bookingRepository.findById(bookingId)
+                    .orElseThrow(() -> new RuntimeException("Booking not found: " + bookingId));
+            
+            // Create notification entity
+            com.flightbooking.entity.Notification notification = new com.flightbooking.entity.Notification();
+            notification.setId(java.util.UUID.randomUUID().toString());
+            notification.setBookingId(bookingId);
+            notification.setChannel("ADMIN_PANEL");
+            notification.setRecipient("ADMIN");
+            notification.setContent("New booking " + booking.getBookingCode() + " requires approval. Payment completed successfully.");
+            
+            // Save notification
+            notificationRepository.save(notification);
+            
+            logger.info("Admin approval notification created for booking: {}", bookingId);
+            
+        } catch (Exception e) {
+            logger.error("Failed to create admin approval notification for booking: {}, error: {}", 
+                    bookingId, e.getMessage(), e);
+            // Don't throw exception - notification failure shouldn't break payment flow
         }
     }
     

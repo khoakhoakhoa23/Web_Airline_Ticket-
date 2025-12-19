@@ -49,6 +49,18 @@ public class PaymentService {
     @Autowired
     private NotificationService notificationService;
     
+    @Autowired
+    private com.flightbooking.service.SeatSelectionService seatSelectionService;
+    
+    @Autowired
+    private com.flightbooking.service.SeatLockService seatLockService;
+    
+    @Autowired
+    private com.flightbooking.service.BookingService bookingService;
+    
+    @Autowired
+    private com.flightbooking.service.TicketService ticketService;
+    
     @Value("${stripe.api.key:}")
     private String stripeApiKey;
     
@@ -208,7 +220,7 @@ public class PaymentService {
             
         } catch (StripeException e) {
             logger.error("Stripe error creating payment: {}", e.getMessage(), e);
-            throw new PaymentFailedException("STRIPE_ERROR", "Failed to create Stripe payment: " + e.getMessage());
+            throw new PaymentFailedException("STRIPE", "STRIPE_ERROR", "Failed to create Stripe payment: " + e.getMessage());
         }
     }
     
@@ -276,9 +288,43 @@ public class PaymentService {
         if ("SUCCESS".equals(status)) {
             Booking booking = payment.getBooking();
             if (booking != null) {
-                booking.setStatus("CONFIRMED");
-                bookingRepository.save(booking);
-                logger.info("Booking {} confirmed after successful payment", booking.getId());
+                // ✅ STANDARD FLOW: Auto-confirm booking after successful payment
+                // Check if seats are still available before confirming
+                try {
+                    // Confirm seat selections first
+                    seatSelectionService.confirmSeatSelectionsForBooking(booking.getId());
+                    
+                    // Confirm seat locks
+                    seatLockService.confirmLocksForBooking(booking.getId());
+                    
+                    // Confirm booking
+                    booking.setStatus("CONFIRMED");
+                    bookingRepository.save(booking);
+                    logger.info("✅ Booking {} auto-confirmed after successful payment", booking.getId());
+                    
+                    // Create ticket automatically after confirmation
+                    try {
+                        ticketService.issueTicket(booking.getId());
+                        logger.info("✅ Ticket created automatically for booking {}", booking.getId());
+                    } catch (Exception e) {
+                        logger.error("Failed to create ticket automatically: {}", e.getMessage());
+                        // Ticket creation failure shouldn't fail the payment confirmation
+                        // Ticket might already exist or booking might not be in correct state
+                    }
+                    
+                } catch (Exception e) {
+                    logger.error("Failed to confirm booking after payment: {}", e.getMessage(), e);
+                    // Fallback: Set to PENDING_PAYMENT for admin review
+                    booking.setStatus("PENDING_PAYMENT");
+                    bookingRepository.save(booking);
+                    
+                    // Create notification for admin to review
+                    try {
+                        notificationService.createAdminApprovalNotification(booking.getId());
+                    } catch (Exception ex) {
+                        logger.error("Failed to create admin approval notification: {}", ex.getMessage());
+                    }
+                }
                 
                 // Send booking confirmation email
                 try {

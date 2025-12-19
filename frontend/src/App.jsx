@@ -18,6 +18,10 @@ import Payment from './pages/Payment';
 import Confirmation from './pages/Confirmation';
 import MyBookings from './pages/MyBookings';
 import AirlineInformation from './pages/AirlineInformation';
+import Contact from './pages/Contact';
+import Support from './pages/Support';
+import Terms from './pages/Terms';
+import Privacy from './pages/Privacy';
 // Admin Pages
 import AdminLayout from './components/admin/AdminLayout';
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -42,6 +46,10 @@ function App() {
                   <Route path="/register" element={<Register />} />
                   <Route path="/flights" element={<FlightSelection />} />
                   <Route path="/airline-info" element={<AirlineInformation />} />
+                  <Route path="/contact" element={<Contact />} />
+                  <Route path="/support" element={<Support />} />
+                  <Route path="/terms" element={<Terms />} />
+                  <Route path="/privacy" element={<Privacy />} />
                   
                   {/* Booking Flow */}
                   <Route path="/booking/flight-selection" element={<FlightSelection />} />

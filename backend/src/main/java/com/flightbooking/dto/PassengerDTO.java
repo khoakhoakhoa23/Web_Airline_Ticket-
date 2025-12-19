@@ -17,5 +17,10 @@ public class PassengerDTO {
     private String documentType;
     private String documentNumber;
     private String bookingId;
+    /**
+     * Seat number assigned to this passenger (e.g., "6E", "12A")
+     * This is populated from seat_selections table when loading booking
+     */
+    private String seatNumber;
 }
 

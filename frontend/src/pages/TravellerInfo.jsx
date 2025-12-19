@@ -302,6 +302,59 @@ const TravellerInfo = () => {
         }
       }
       
+      // Get selected seats from context, location state, or localStorage
+      let seatsToUse = selectedSeats || location.state?.selectedSeats || [];
+      
+      // Fallback to localStorage if context and state are empty
+      if (!seatsToUse || seatsToUse.length === 0) {
+        try {
+          const storedSeats = localStorage.getItem('selectedSeats');
+          if (storedSeats) {
+            seatsToUse = JSON.parse(storedSeats);
+            console.log('[TravellerInfo] Loaded seats from localStorage:', seatsToUse);
+          }
+        } catch (e) {
+          console.error('[TravellerInfo] Error parsing stored seats:', e);
+        }
+      }
+      
+      console.log('[TravellerInfo] Selected seats from context:', selectedSeats);
+      console.log('[TravellerInfo] Selected seats from location state:', location.state?.selectedSeats);
+      console.log('[TravellerInfo] Final seatsToUse:', seatsToUse);
+      
+      // Helper function to get seat price
+      const getPriceForSeat = (seatLabel) => {
+        if (!seatLabel) return 0;
+        const row = parseInt(seatLabel);
+        // Front seats (rows 1-10) are premium
+        if (row <= 10) return 500000;
+        // Exit rows (usually rows 12-15) are premium
+        if (row >= 12 && row <= 15) return 300000;
+        // Regular seats (rows 11, 16+) have standard fee
+        return 100000;
+      };
+      
+      // Helper function to determine seat type
+      const getSeatType = (seatLabel) => {
+        if (!seatLabel) return 'STANDARD';
+        const col = seatLabel.slice(-1); // Last character (A, B, C, D, E, F)
+        if (col === 'A' || col === 'F') return 'WINDOW';
+        if (col === 'C' || col === 'D') return 'AISLE';
+        return 'MIDDLE';
+      };
+      
+      // Prepare seat selections - map seats to passengers
+      const seatSelections = seatsToUse.map((seatNumber, index) => {
+        const price = getPriceForSeat(seatNumber);
+        return {
+          seatNumber: seatNumber,
+          passengerIndex: index, // Map to passenger by index
+          seatType: getSeatType(seatNumber),
+          price: price // Ensure it's a number
+        };
+      });
+      console.log('[TravellerInfo] Prepared seatSelections:', seatSelections);
+      
       // ✅ Prepare booking data (userId removed - backend extracts from JWT token)
       // Ensure all numbers are properly formatted
       const bookingData = {
@@ -326,6 +379,7 @@ const TravellerInfo = () => {
           documentType: p.documentType,
           documentNumber: p.documentNumber.trim(),
         })),
+        seatSelections: seatSelections, // ✅ Include seat selections
       };
       
       // ✅ Validate booking data before sending (userId validation removed)
@@ -342,9 +396,12 @@ const TravellerInfo = () => {
         seatPrice: finalSeatPrice,
         flightNumber: bookingData.flightSegments[0].flightNumber,
         passengersCount: bookingData.passengers.length,
+        seatSelectionsCount: seatSelections.length,
+        seatSelections: seatSelections,
         totalExpected: ((Number(flightToUse.baseFare) || 0) + (Number(flightToUse.taxes) || 0) + finalSeatPrice)
       });
       console.log('✅ userId removed from request - Backend will extract from JWT token');
+      console.log('✅ Seat selections included:', seatSelections);
 
       // Create booking
       const booking = await createBooking(bookingData);

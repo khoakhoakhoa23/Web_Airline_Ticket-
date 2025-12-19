@@ -38,14 +38,43 @@ public class SeatSelectionService {
     public SeatSelectionDTO createSeatSelection(CreateSeatSelectionRequest request) {
         SeatSelection seatSelection = new SeatSelection();
         seatSelection.setId(UUID.randomUUID().toString());
+        seatSelection.setBookingId(request.getBookingId());
         seatSelection.setPassengerId(request.getPassengerId());
         seatSelection.setSegmentId(request.getSegmentId());
         seatSelection.setSeatNumber(request.getSeatNumber());
         seatSelection.setSeatType(request.getSeatType());
         seatSelection.setPrice(request.getPrice());
+        seatSelection.setStatus("RESERVED"); // Default status when created
         
         seatSelection = seatSelectionRepository.save(seatSelection);
         return convertToDTO(seatSelection);
+    }
+    
+    /**
+     * Confirm seat selection (after payment success)
+     */
+    @Transactional
+    public void confirmSeatSelection(String seatSelectionId) {
+        SeatSelection seatSelection = seatSelectionRepository.findById(seatSelectionId)
+            .orElseThrow(() -> new RuntimeException("Seat selection not found"));
+        
+        seatSelection.setStatus("CONFIRMED");
+        seatSelectionRepository.save(seatSelection);
+    }
+    
+    /**
+     * Confirm all seat selections for a booking
+     */
+    @Transactional
+    public void confirmSeatSelectionsForBooking(String bookingId) {
+        List<SeatSelection> seatSelections = seatSelectionRepository.findByBookingId(bookingId);
+        
+        for (SeatSelection seatSelection : seatSelections) {
+            if ("RESERVED".equals(seatSelection.getStatus())) {
+                seatSelection.setStatus("CONFIRMED");
+                seatSelectionRepository.save(seatSelection);
+            }
+        }
     }
     
     public List<SeatSelectionDTO> getSeatSelectionsByPassengerId(String passengerId) {
@@ -56,6 +85,16 @@ public class SeatSelectionService {
     
     public List<SeatSelectionDTO> getSeatSelectionsBySegmentId(String segmentId) {
         return seatSelectionRepository.findBySegmentId(segmentId).stream()
+            .map(this::convertToDTO)
+            .collect(Collectors.toList());
+    }
+    
+    /**
+     * Get seat selections by booking ID
+     * Used by MyBookings page to display selected seats
+     */
+    public List<SeatSelectionDTO> getSeatSelectionsByBookingId(String bookingId) {
+        return seatSelectionRepository.findByBookingId(bookingId).stream()
             .map(this::convertToDTO)
             .collect(Collectors.toList());
     }
@@ -118,11 +157,13 @@ public class SeatSelectionService {
     private SeatSelectionDTO convertToDTO(SeatSelection seatSelection) {
         SeatSelectionDTO dto = new SeatSelectionDTO();
         dto.setId(seatSelection.getId());
+        dto.setBookingId(seatSelection.getBookingId());
         dto.setPassengerId(seatSelection.getPassengerId());
         dto.setSegmentId(seatSelection.getSegmentId());
         dto.setSeatNumber(seatSelection.getSeatNumber());
         dto.setSeatType(seatSelection.getSeatType());
         dto.setPrice(seatSelection.getPrice());
+        dto.setStatus(seatSelection.getStatus());
         return dto;
     }
 }

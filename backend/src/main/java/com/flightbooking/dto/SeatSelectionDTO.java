@@ -11,10 +11,12 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 public class SeatSelectionDTO {
     private String id;
+    private String bookingId;
     private String passengerId;
+    private String segmentId;
     private String seatNumber;
     private String seatType;
     private BigDecimal price;
-    private String segmentId;
+    private String status; // RESERVED, CONFIRMED, CANCELLED
 }
 
