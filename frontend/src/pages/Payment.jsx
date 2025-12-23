@@ -100,7 +100,12 @@ const Payment = () => {
 
   /**
    * Handle payment submission
-   * Creates payment and redirects to Stripe Checkout
+   * Creates PaymentIntent and returns clientSecret for frontend confirmation
+   * 
+   * Error Handling Fix:
+   * - Problem: Frontend crashed with "Cannot read properties of null (reading 'data')"
+   * - Cause: When API returns 402/error, err.response might be null or err.response.data might be null
+   * - Solution: Use optional chaining and provide fallback error messages
    */
   const handlePayment = async () => {
     if (!acceptedTerms) {
@@ -132,27 +137,60 @@ const Payment = () => {
       };
 
       // Call payment API
+      // FIXED: Safe error handling - check if response exists before accessing data
       const response = await paymentService.createPayment(paymentData);
+      
+      // Validate response structure
+      if (!response || !response.data) {
+        throw new Error('Invalid response from payment server');
+      }
+      
       const payment = response.data;
       
-      // Check if we have a checkout URL (for Stripe)
-      if (payment.checkoutUrl) {
-        toast.success('Redirecting to payment gateway...');
+      // Payment created successfully - waiting for admin approval
+      if (payment.status === 'PENDING') {
+        toast.success('Yêu cầu thanh toán đã được gửi! Đang chờ admin duyệt...');
         
-        // Store payment ID for later reference
+        // Store payment ID for reference
         localStorage.setItem('pendingPaymentId', payment.paymentId);
         
-        // Redirect to Stripe Checkout
+        // Redirect to booking confirmation page with pending status
+        navigate(`/booking/confirmation/${booking.id}?payment=pending`, { replace: true });
+      } else if (payment.checkoutUrl) {
+        // Fallback: If checkoutUrl is provided (for other payment methods)
+        toast.success('Redirecting to payment gateway...');
+        localStorage.setItem('pendingPaymentId', payment.paymentId);
         window.location.href = payment.checkoutUrl;
       } else {
-        // For other payment methods (VNPAY, MOMO) - not yet implemented
-        toast.error(payment.message || 'Payment method not available yet. Please use Stripe.');
+        // Show success message
+        toast.success(payment?.message || 'Payment request submitted successfully');
+        navigate(`/booking/confirmation/${booking.id}?payment=pending`, { replace: true });
       }
     } catch (err) {
       console.error('Error creating payment:', err);
-      const message = err.response?.data?.message || err.message || 'Payment failed. Please try again.';
-      setError(message);
-      toast.error(message);
+      
+      // FIXED: Safe error message extraction with multiple fallbacks
+      // Prevents crash when err.response or err.response.data is null
+      let errorMessage = 'Payment failed. Please try again.';
+      
+      if (err.response) {
+        // Response exists - try to extract message
+        if (err.response.data) {
+          // Data exists - use message from response
+          errorMessage = err.response.data.message || 
+                       err.response.data.error || 
+                       `Payment failed: ${err.response.status} ${err.response.statusText}`;
+        } else {
+          // Response exists but no data - use status
+          errorMessage = `Payment failed: ${err.response.status} ${err.response.statusText || 'Unknown error'}`;
+        }
+      } else if (err.message) {
+        // No response but has message (network error, etc.)
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setProcessing(false);
     }

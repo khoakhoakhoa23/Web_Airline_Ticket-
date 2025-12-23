@@ -38,6 +38,16 @@ const AirlineInformation = () => {
 
   // Filter flights
   const filteredFlights = flights.filter(flight => {
+    // FIX: Loại bỏ chuyến bay đã hết thời gian (arriveTime < now)
+    // Chỉ hiển thị chuyến bay chưa đến thời gian đến
+    if (flight.arriveTime) {
+      const arriveTime = new Date(flight.arriveTime);
+      const now = new Date();
+      if (arriveTime < now) {
+        return false; // Chuyến bay đã hết thời gian, không hiển thị
+      }
+    }
+    
     const matchesAirline = selectedAirline === 'ALL' || flight.airline === selectedAirline;
     const matchesRoute = selectedRoute === 'ALL' || `${flight.origin} → ${flight.destination}` === selectedRoute;
     const matchesSearch = searchTerm === '' || 

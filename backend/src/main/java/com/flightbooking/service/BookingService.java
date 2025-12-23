@@ -51,6 +51,9 @@ public class BookingService {
     @Autowired
     private com.flightbooking.repository.SeatSelectionRepository seatSelectionRepository;
     
+    @Autowired
+    private com.flightbooking.repository.PaymentRepository paymentRepository;
+    
     /**
      * Create new booking with validation
      * 
@@ -889,9 +892,27 @@ public class BookingService {
             logger.info("✅ Booking {} approved successfully. Status changed from {} to CONFIRMED", 
                 id, currentStatus);
             
+            // If booking has payment, approve payment as well
+            try {
+                java.util.List<com.flightbooking.entity.Payment> payments = paymentRepository.findByBookingId(id);
+                
+                for (com.flightbooking.entity.Payment payment : payments) {
+                    if ("PENDING".equals(payment.getStatus())) {
+                        payment.setStatus("SUCCESS");
+                        payment.setUpdatedAt(LocalDateTime.now());
+                        paymentRepository.save(payment);
+                        logger.info("✅ Payment {} approved automatically with booking approval", payment.getId());
+                    }
+                }
+            } catch (Exception e) {
+                logger.error("Failed to approve payment for booking {}: {}", id, e.getMessage());
+                // Don't fail booking approval if payment update fails
+            }
+            
             // Create ticket for approved booking
             try {
                 createTicketForBooking(booking);
+                logger.info("✅ Ticket created for booking {}", id);
             } catch (Exception e) {
                 logger.error("Failed to create ticket for booking {}: {}", id, e.getMessage());
                 // Don't fail the approval if ticket creation fails

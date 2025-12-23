@@ -9,12 +9,7 @@ import com.flightbooking.exception.PaymentFailedException;
 import com.flightbooking.exception.ResourceNotFoundException;
 import com.flightbooking.repository.BookingRepository;
 import com.flightbooking.repository.PaymentRepository;
-import com.stripe.Stripe;
-import com.stripe.exception.StripeException;
-import com.stripe.model.PaymentIntent;
-import com.stripe.model.checkout.Session;
-import com.stripe.param.PaymentIntentCreateParams;
-import com.stripe.param.checkout.SessionCreateParams;
+// Stripe imports removed - using manual admin approval flow instead
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -61,8 +56,19 @@ public class PaymentService {
     @Autowired
     private com.flightbooking.service.TicketService ticketService;
     
-    @Value("${stripe.api.key:}")
-    private String stripeApiKey;
+    /**
+     * Stripe Secret Key (sk_test_... or sk_live_...)
+     * NEVER expose this to frontend - only used server-side
+     * 
+     * Why stripe.secret.key instead of stripe.api.key?
+     * - More explicit naming: clearly indicates this is a SECRET key
+     * - Prevents confusion with publishable keys (pk_test_...)
+     * - Industry standard naming convention
+     * 
+     * Backward compatibility: Also check stripe.api.key if stripe.secret.key is not set
+     */
+    @Value("${stripe.secret.key:${stripe.api.key:}}")
+    private String stripeSecretKey;
     
     @Value("${stripe.webhook.secret:}")
     private String stripeWebhookSecret;
@@ -133,76 +139,46 @@ public class PaymentService {
     }
     
     /**
-     * Create Stripe payment
-     * Uses Stripe Checkout Session for hosted payment page
+     * Create manual payment (admin approval required)
+     * 
+     * Flow:
+     * 1. User clicks "Pay" → Create payment with status PENDING
+     * 2. Send notification to admin for approval
+     * 3. Admin approves payment → Payment status → SUCCESS
+     * 4. Auto-confirm booking and issue ticket
+     * 
+     * This replaces Stripe integration with manual admin approval process
      */
     private PaymentResponse createStripePayment(Booking booking, PaymentCreateRequest request) {
         try {
-            // Initialize Stripe with API key
-            Stripe.apiKey = stripeApiKey;
-            
-            // Calculate amount in cents (Stripe requires smallest currency unit)
-            // For VND: amount * 1 (VND has no subunit)
-            // For USD: amount * 100 (cents)
-            long amountInSmallestUnit;
-            String currency;
-            
-            if ("VND".equals(booking.getCurrency())) {
-                amountInSmallestUnit = booking.getTotalAmount().longValue();
-                currency = "vnd";
-            } else {
-                // Default to USD
-                amountInSmallestUnit = booking.getTotalAmount().multiply(BigDecimal.valueOf(100)).longValue();
-                currency = "usd";
-            }
-            
-            // Create Stripe Checkout Session
-            SessionCreateParams params = SessionCreateParams.builder()
-                    .setMode(SessionCreateParams.Mode.PAYMENT)
-                    .setSuccessUrl(request.getSuccessUrl() != null ? 
-                            request.getSuccessUrl() : defaultSuccessUrl + "?booking_id=" + booking.getId())
-                    .setCancelUrl(request.getCancelUrl() != null ? 
-                            request.getCancelUrl() : defaultCancelUrl + "?booking_id=" + booking.getId())
-                    .addLineItem(
-                            SessionCreateParams.LineItem.builder()
-                                    .setPriceData(
-                                            SessionCreateParams.LineItem.PriceData.builder()
-                                                    .setCurrency(currency)
-                                                    .setUnitAmount(amountInSmallestUnit)
-                                                    .setProductData(
-                                                            SessionCreateParams.LineItem.PriceData.ProductData.builder()
-                                                                    .setName("Flight Booking - " + booking.getBookingCode())
-                                                                    .setDescription("Flight booking payment")
-                                                                    .build()
-                                                    )
-                                                    .build()
-                                    )
-                                    .setQuantity(1L)
-                                    .build()
-                    )
-                    .putMetadata("booking_id", booking.getId())
-                    .putMetadata("booking_code", booking.getBookingCode())
-                    .build();
-            
-            Session session = Session.create(params);
-            
-            // Create payment record in database
+            // Create payment record with PENDING status (waiting for admin approval)
             Payment payment = new Payment();
             payment.setId(UUID.randomUUID().toString());
             payment.setBookingId(booking.getId());
             payment.setAmount(booking.getTotalAmount());
             payment.setCurrency(booking.getCurrency());
-            payment.setPaymentMethod("STRIPE");
-            payment.setPaymentIntentId(session.getPaymentIntent());
-            payment.setTransactionId(session.getId());
+            payment.setPaymentMethod("STRIPE"); // Keep method name for compatibility
             payment.setStatus("PENDING");
-            payment.setDescription("Flight booking payment - " + booking.getBookingCode());
+            payment.setDescription("Flight booking payment - " + booking.getBookingCode() + " (Awaiting admin approval)");
+            payment.setCreatedAt(java.time.LocalDateTime.now());
             
             payment = paymentRepository.save(payment);
             
-            // Update booking status
+            // Update booking status to PENDING_PAYMENT
             booking.setStatus("PENDING_PAYMENT");
             bookingRepository.save(booking);
+            
+            // Send notification to admin for approval
+            try {
+                notificationService.createAdminApprovalNotification(booking.getId());
+                logger.info("Admin approval notification sent for booking: {}", booking.getId());
+            } catch (Exception e) {
+                logger.error("Failed to send admin notification for booking {}: {}", 
+                    booking.getId(), e.getMessage());
+                // Don't fail payment creation if notification fails
+            }
+            
+            logger.info("Payment created successfully (pending admin approval): {}", payment.getId());
             
             // Build response
             return PaymentResponse.builder()
@@ -212,15 +188,14 @@ public class PaymentService {
                     .currency(booking.getCurrency())
                     .paymentMethod("STRIPE")
                     .status("PENDING")
-                    .paymentIntentId(session.getPaymentIntent())
-                    .checkoutUrl(session.getUrl())
-                    .description("Redirect to Stripe Checkout to complete payment")
-                    .message("Payment session created. Please complete payment at Stripe Checkout.")
+                    .description("Flight booking payment - " + booking.getBookingCode())
+                    .message("Payment request submitted. Waiting for admin approval. You will be notified once your payment is approved.")
                     .build();
             
-        } catch (StripeException e) {
-            logger.error("Stripe error creating payment: {}", e.getMessage(), e);
-            throw new PaymentFailedException("STRIPE", "STRIPE_ERROR", "Failed to create Stripe payment: " + e.getMessage());
+        } catch (Exception e) {
+            logger.error("Error creating payment: {}", e.getMessage(), e);
+            throw new PaymentFailedException("STRIPE", "PAYMENT_CREATION_ERROR", 
+                "Failed to create payment: " + e.getMessage());
         }
     }
     

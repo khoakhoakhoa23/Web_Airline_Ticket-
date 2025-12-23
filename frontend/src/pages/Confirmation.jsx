@@ -60,6 +60,8 @@ const Confirmation = () => {
       const paymentStatus = searchParams.get('payment');
       if (paymentStatus === 'success') {
         toast.success('Thanh toán thành công!');
+      } else if (paymentStatus === 'pending') {
+        toast.info('Yêu cầu thanh toán đã được gửi. Đang chờ admin duyệt...');
       }
 
       // Fetch ticket if booking is confirmed
@@ -236,9 +238,10 @@ const Confirmation = () => {
         {isPending && (
           <div className="pending-banner">
             <div className="pending-icon">⏳</div>
-            <h1 className="pending-title">Đang chờ thanh toán</h1>
+            <h1 className="pending-title">Đang chờ duyệt thanh toán</h1>
             <p className="pending-subtitle">
-              Vui lòng hoàn tất thanh toán để xác nhận đặt chỗ của bạn.
+              Yêu cầu thanh toán của bạn đã được gửi và đang chờ admin duyệt. 
+              Bạn sẽ nhận được thông báo khi đơn hàng được duyệt và vé được xuất.
             </p>
           </div>
         )}
@@ -486,14 +489,12 @@ const Confirmation = () => {
               </button>
             </>
           )}
-          {isPending && (
-            <Link 
-              to={`/booking/payment?booking_id=${booking.id}`} 
-              className="btn-primary payment-btn"
-            >
-              <span className="icon">💳</span>
-              Hoàn tất thanh toán
-            </Link>
+          {isPending && booking.status === 'PENDING_PAYMENT' && (
+            <div className="pending-payment-info">
+              <p style={{ color: '#f59e0b', marginBottom: '10px' }}>
+                ⏳ Đang chờ admin duyệt thanh toán. Vui lòng đợi thông báo.
+              </p>
+            </div>
           )}
           <button className="btn-primary" onClick={() => navigate('/my-bookings')}>
             <span className="icon">📋</span>

@@ -50,12 +50,23 @@ const AdminFlights = () => {
     }
   };
 
-  const handleDelete = async (id, flightNumber) => {
-    if (!confirm(`Xóa chuyến bay ${flightNumber}? Hành động này không thể hoàn tác.`)) return;
+  const handleDelete = async (id, flightNumber, flight) => {
+    // Chỉ cho phép xóa chuyến bay đã hết thời gian (arriveTime < now)
+    if (flight && flight.arriveTime) {
+      const arriveTime = new Date(flight.arriveTime);
+      const now = new Date();
+      
+      if (arriveTime >= now) {
+        alert('Chỉ có thể xóa chuyến bay đã hết thời gian bay. Chuyến bay này chưa đến thời gian đến.');
+        return;
+      }
+    }
+    
+    if (!confirm(`Xóa chuyến bay ${flightNumber}?\n\nLưu ý: Lịch sử đặt vé của khách hàng sẽ được giữ lại.`)) return;
 
     try {
       await deleteFlight(id);
-      alert('Đã xóa chuyến bay thành công!');
+      alert('Đã xóa chuyến bay thành công! Lịch sử đặt vé đã được giữ lại.');
       loadFlights();
     } catch (err) {
       console.error('Failed to delete flight:', err);
@@ -223,8 +234,15 @@ const AdminFlights = () => {
         <div className="stat-card">
           <span className="stat-icon">🛫</span>
           <div>
-            <p className="stat-label">Đang bay</p>
-            <p className="stat-value">{flights.filter(f => f.status === 'DEPARTED').length}</p>
+            <p className="stat-label">Đã bay</p>
+            <p className="stat-value">
+              {flights.filter(f => {
+                if (!f.arriveTime) return false;
+                const arriveTime = new Date(f.arriveTime);
+                const now = new Date();
+                return arriveTime < now; // Chuyến bay đã hết thời gian
+              }).length}
+            </p>
           </div>
         </div>
       </div>
@@ -293,9 +311,26 @@ const AdminFlights = () => {
                       💺
                     </button>
                     <button 
-                      onClick={() => handleDelete(flight.id, flight.flightNumber)}
+                      onClick={() => {
+                        const arriveTime = flight.arriveTime ? new Date(flight.arriveTime) : null;
+                        const now = new Date();
+                        const canDelete = arriveTime && arriveTime < now;
+                        
+                        if (canDelete) {
+                          handleDelete(flight.id, flight.flightNumber, flight);
+                        } else {
+                          alert('Chỉ có thể xóa chuyến bay đã hết thời gian bay.');
+                        }
+                      }}
                       className="action-btn delete"
-                      title="Xóa chuyến bay"
+                      title={flight.arriveTime && new Date(flight.arriveTime) < new Date() 
+                        ? "Xóa chuyến bay đã hết thời gian" 
+                        : "Chuyến bay này chưa hết thời gian, không thể xóa"}
+                      disabled={!flight.arriveTime || new Date(flight.arriveTime) >= new Date()}
+                      style={{ 
+                        opacity: (!flight.arriveTime || new Date(flight.arriveTime) >= new Date()) ? 0.5 : 1,
+                        cursor: (!flight.arriveTime || new Date(flight.arriveTime) >= new Date()) ? 'not-allowed' : 'pointer'
+                      }}
                     >
                       🗑️
                     </button>

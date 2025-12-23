@@ -46,11 +46,18 @@ api.interceptors.response.use(
 
     if (status === 401) {
       // Unauthorized - clear authentication data
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
+      // FIX: Only clear token and redirect if we're not already on login/register page
+      // This prevents infinite redirect loops and unnecessary token clearing
+      const currentPath = window.location.pathname;
+      const isAuthPage = currentPath === '/login' || currentPath === '/register';
       
-      // Redirect to login if not already there
-      if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
+      if (!isAuthPage) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        
+        // Use React Router navigate instead of window.location for better UX
+        // But since we're in interceptor, we'll use window.location as fallback
+        // The actual redirect should be handled by ProtectedRoute
         window.location.href = '/login';
       }
       
@@ -84,6 +91,14 @@ api.interceptors.response.use(
         }
       } else {
         error.message = data?.message || 'Dữ liệu không hợp lệ.';
+      }
+    } else if (status === 402) {
+      // Payment Required - Stripe payment errors
+      // FIXED: Safe error message extraction to prevent null reference crashes
+      if (typeof data === 'object' && data !== null && data.message) {
+        error.message = data.message;
+      } else {
+        error.message = data?.message || 'Payment failed. Please check your payment method and try again.';
       }
     } else if (status >= 500) {
       error.message = 'Lỗi server. Vui lòng thử lại sau.';

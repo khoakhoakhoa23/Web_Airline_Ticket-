@@ -63,28 +63,48 @@ export const AuthProvider = ({ children }) => {
   };
 
   // Initialize: Load user from token on mount
+  // FIX: Restore user authentication state immediately on page load/refresh
+  // This prevents the "logout on F5" issue where ProtectedRoute redirects
+  // before token is restored from localStorage
   useEffect(() => {
-    const storedToken = localStorage.getItem('token');
-    
-    if (storedToken) {
+    const restoreAuth = () => {
+      const storedToken = localStorage.getItem('token');
+      
+      if (!storedToken) {
+        // No token found - user is not authenticated
+        setLoading(false);
+        return;
+      }
+      
       // Check if token is expired
       if (isTokenExpired(storedToken)) {
         console.log('Token expired, clearing authentication');
         localStorage.removeItem('token');
+        setUser(null);
         setLoading(false);
         return;
       }
       
       // Decode token to get user info
+      // This is synchronous - no API call needed
       const userData = decodeToken(storedToken);
       if (userData) {
+        // ✅ Immediately set user state - no async operation needed
+        // This ensures user is authenticated before ProtectedRoute checks
         setUser(userData);
+        console.log('User authentication restored from token');
       } else {
+        // Invalid token - remove it
+        console.warn('Invalid token format, clearing authentication');
         localStorage.removeItem('token');
+        setUser(null);
       }
-    }
-    
-    setLoading(false);
+      
+      setLoading(false);
+    };
+
+    // Restore authentication immediately
+    restoreAuth();
   }, []);
 
   /**

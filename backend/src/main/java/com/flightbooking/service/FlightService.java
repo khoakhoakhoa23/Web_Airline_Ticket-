@@ -117,15 +117,32 @@ public class FlightService {
     }
     
     /**
-     * Get all flights
-     * Used for admin/testing purposes
+     * Get all flights (only active flights - not yet arrived)
+     * Used for public airline information page
      * 
-     * @return List of FlightDTO
+     * FIX: Filter out flights that have already completed (arriveTime < now)
+     * This prevents showing expired flights to users
+     * 
+     * @return List of FlightDTO (only flights that haven't arrived yet)
      */
     @Transactional(readOnly = true)
     public List<FlightDTO> getAllFlights() {
-        logger.info("Getting all flights");
+        logger.info("Getting all active flights (excluding completed flights)");
+        LocalDateTime now = LocalDateTime.now();
+        
         return flightRepository.findAll().stream()
+                .filter(flight -> {
+                    // Only include flights that haven't arrived yet
+                    if (flight.getArriveTime() != null) {
+                        return flight.getArriveTime().isAfter(now);
+                    }
+                    // If arriveTime is null, check departTime
+                    if (flight.getDepartTime() != null) {
+                        return flight.getDepartTime().isAfter(now);
+                    }
+                    // If both are null, exclude it
+                    return false;
+                })
                 .map(this::convertToDTO)
                 .collect(Collectors.toList());
     }
@@ -394,7 +411,15 @@ public class FlightService {
     }
     
     /**
-     * Admin: Delete flight (with business rule check)
+     * Admin: Delete flight (only if flight has completed)
+     * 
+     * Business Rules:
+     * - Only allow deletion of flights that have already arrived (arriveTime < now)
+     * - Booking history (Booking, FlightSegment, Ticket) will be preserved
+     * - This is safe because FlightSegment references Flight by flightNumber, not by Flight ID
+     * 
+     * @param id Flight ID
+     * @throws BusinessException if flight hasn't completed yet
      */
     @Transactional
     public void deleteFlight(String id) {
@@ -403,19 +428,31 @@ public class FlightService {
         Flight flight = flightRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Flight not found with ID: " + id));
         
-        // Business rule: Cannot delete flights in the past or with status COMPLETED
-        if ("COMPLETED".equals(flight.getStatus()) || "CANCELLED".equals(flight.getStatus())) {
-            logger.warn("Cannot delete flight with status: {}", flight.getStatus());
-            // Allow deletion anyway for admin (they can override)
+        // CRITICAL: Only allow deletion of flights that have already completed
+        // Check if flight has arrived (arriveTime < now)
+        if (flight.getArriveTime() != null && flight.getArriveTime().isAfter(LocalDateTime.now())) {
+            throw new BusinessException("CANNOT_DELETE_ACTIVE_FLIGHT", 
+                "Chỉ có thể xóa chuyến bay đã hết thời gian bay. " +
+                "Chuyến bay này chưa đến thời gian đến: " + flight.getArriveTime());
         }
         
-        if (flight.getDepartTime().isBefore(LocalDateTime.now())) {
-            logger.warn("Deleting past flight: {}", id);
-            // Allow but log warning
+        // Additional check: if arriveTime is null, check departTime
+        if (flight.getArriveTime() == null && flight.getDepartTime().isAfter(LocalDateTime.now())) {
+            throw new BusinessException("CANNOT_DELETE_FUTURE_FLIGHT", 
+                "Không thể xóa chuyến bay chưa khởi hành.");
         }
         
+        logger.info("Deleting completed flight: {} (arrived at: {})", id, flight.getArriveTime());
+        logger.info("Note: Booking history (Bookings, Tickets, FlightSegments) will be preserved");
+        
+        // Delete flight - this is safe because:
+        // 1. FlightSegment references Flight by flightNumber (string), not by Flight ID
+        // 2. Booking references FlightSegment, not Flight directly
+        // 3. Ticket references Booking, not Flight
+        // So deleting Flight won't cascade delete booking history
         flightRepository.delete(flight);
-        logger.info("Flight deleted successfully: {}", id);
+        
+        logger.info("✅ Flight deleted successfully: {}. Booking history preserved.", id);
     }
 }
 

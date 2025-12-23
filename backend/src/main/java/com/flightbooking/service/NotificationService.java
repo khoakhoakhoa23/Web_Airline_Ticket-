@@ -223,7 +223,7 @@ public class NotificationService {
             notification.setBookingId(bookingId);
             notification.setChannel("ADMIN_PANEL");
             notification.setRecipient("ADMIN");
-            notification.setContent("New booking " + booking.getBookingCode() + " requires approval. Payment completed successfully.");
+            notification.setContent("Đơn đặt vé mới " + booking.getBookingCode() + " đang chờ duyệt thanh toán. Vui lòng kiểm tra và duyệt đơn hàng.");
             
             // Save notification
             notificationRepository.save(notification);
